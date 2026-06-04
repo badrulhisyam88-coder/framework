@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Changes — AI Assist Tool{% endblock %}
+{% block heading %}Changes{% endblock %}
+{% block actions %}
+{% if unacknowledged > 0 %}
+<button class="btn btn-secondary"
+    hx-post="/api/v1/validation/changes/acknowledge-all"
+    hx-target="#changes-body"
+    hx-swap="none">
+    Acknowledge All ({{ unacknowledged }})
+</button>
+{% endif %}
+{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-title">Detected Changes</div>
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>Type</th><th>Host</th><th>Detail</th><th>Detected</th><th>Ack</th></tr></thead>
+            <tbody id="changes-body">
+                {% for c in changes %}
+                <tr id="change-{{ c.id }}" {% if not c.acknowledged %}style="background:rgba(59,130,246,0.04)"{% endif %}>
+                    <td><span class="change-type change-{{ c.change_type }}">{{ c.change_type.replace('_',' ') }}</span></td>
+                    <td class="mono">{{ c.detail.get('ip', c.host_id[:8] if c.host_id else '—') }}</td>
+                    <td class="text-muted" style="font-size:12px;">
+                        {% for k, v in c.detail.items() %}{% if k != 'ip' %}<span class="mono">{{ k }}:</span> {{ v }}  {% endif %}{% endfor %}
+                    </td>
+                    <td class="text-muted mono" style="font-size:11px;">{{ c.detected_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                    <td>
+                        {% if not c.acknowledged %}
+                        <button class="btn btn-secondary btn-sm"
+                            hx-post="/api/v1/validation/changes/{{ c.id }}/acknowledge"
+                            hx-target="#change-{{ c.id }}"
+                            hx-swap="outerHTML">✓</button>
+                        {% else %}<span class="text-muted">✓</span>{% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5" class="empty-state">No changes detected.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

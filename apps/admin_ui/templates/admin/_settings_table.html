@@ -1,0 +1,34 @@
+<table>
+  <thead>
+    <tr>
+      <th>Gate ID</th>
+      <th>Description</th>
+      <th>Default</th>
+      <th>Current</th>
+      <th>Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for gate in gates %}
+    <tr>
+      <td><code>{{ gate.gate_id }}</code></td>
+      <td>{{ gate.description }}</td>
+      <td class="gate-default">{{ "ON" if gate.default else "OFF" }}</td>
+      <td class="gate-value gate-{{ 'on' if gate.value else 'off' }}">{{ "ON" if gate.value else "OFF" }}</td>
+      <td>
+        <button
+          hx-post="/admin/settings/{{ gate.gate_id }}"
+          hx-target="#settings-container"
+          hx-swap="innerHTML"
+          class="gate-toggle">
+          {{ "Disable" if gate.value else "Enable" }}
+        </button>
+      </td>
+    </tr>
+    {% endfor %}
+    {% if not gates %}
+    <tr><td colspan="5">No gates registered.</td></tr>
+    {% endif %}
+  </tbody>
+</table>
+<p class="last-updated">Last updated: {{ now_iso }}</p>

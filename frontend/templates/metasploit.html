@@ -1,0 +1,503 @@
+{% extends "base.html" %}
+{% block title %}Metasploit — AI Assist Tool{% endblock %}
+{% block heading %}Metasploit{% endblock %}
+
+{% block actions %}
+<span id="msf-status" class="mono" style="font-size:12px;color:var(--text-muted);">
+    Checking msfrpcd…
+</span>
+<button class="btn btn-secondary btn-sm" type="button" onclick="refreshMsfStatus()">
+    ↻ Refresh
+</button>
+{% endblock %}
+
+{% block content %}
+<style>
+    .msf-layout { display: grid; grid-template-columns: 340px 1fr; gap: 16px; }
+    .msf-search-card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px; }
+    .msf-results { max-height: 360px; overflow-y: auto; margin-top: 10px; }
+    .msf-result-row {
+        font-family: var(--mono);
+        font-size: 12px;
+        padding: 6px 8px;
+        border-radius: 4px;
+        cursor: pointer;
+        color: var(--text-primary);
+    }
+    .msf-result-row:hover { background: var(--bg-hover); }
+    .msf-result-row .module-type {
+        display: inline-block;
+        font-size: 10px;
+        padding: 1px 6px;
+        border-radius: 3px;
+        background: var(--bg-raised);
+        color: var(--text-muted);
+        margin-right: 6px;
+        text-transform: uppercase;
+    }
+    .msf-output {
+        background: #0a0c0f;
+        color: #cfe;
+        font-family: var(--mono);
+        font-size: 11.5px;
+        white-space: pre-wrap;
+        padding: 14px;
+        border-radius: var(--radius);
+        max-height: 480px;
+        overflow-y: auto;
+        border: 1px solid var(--border);
+    }
+    .msf-status-ok { color: var(--low); }
+    .msf-status-bad { color: var(--critical); }
+    .msf-warn-banner {
+        background: rgba(234,179,8,0.10);
+        border: 1px solid rgba(234,179,8,0.35);
+        color: var(--medium);
+        font-size: 12px;
+        padding: 10px 12px;
+        border-radius: var(--radius);
+        margin-bottom: 14px;
+    }
+    .msf-recipe-mod {
+        background: var(--bg-raised);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 12px;
+        margin-bottom: 10px;
+    }
+    .msf-recipe-mod-head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 6px;
+    }
+    .msf-recipe-what {
+        color: var(--text-secondary);
+        font-size: 12px;
+        margin-bottom: 8px;
+    }
+    .msf-recipe-block {
+        margin: 6px 0;
+        font-size: 11.5px;
+        color: var(--text-secondary);
+    }
+    .msf-recipe-block ul {
+        margin: 4px 0 4px 18px;
+        padding: 0;
+    }
+    .msf-recipe-label {
+        display: block;
+        text-transform: uppercase;
+        font-family: var(--mono);
+        font-size: 10px;
+        letter-spacing: 0.05em;
+        margin-bottom: 3px;
+    }
+    .msf-recipe-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin-top: 6px;
+    }
+    .msf-recipe-note {
+        font-size: 11.5px;
+        color: var(--medium);
+        background: rgba(234,179,8,0.10);
+        border-left: 3px solid var(--medium);
+        padding: 6px 10px;
+        margin-top: 8px;
+    }
+    .msf-recipe-tips ul {
+        margin: 4px 0 0 18px;
+        padding: 0;
+        font-size: 12px;
+        color: var(--text-secondary);
+    }
+</style>
+
+<div class="msf-warn-banner">
+    <strong>Manual tool — no automation.</strong>
+    Nothing here is wired to the scanner, queue, or findings. Every run
+    on this page is started by you, in this tab. Only run modules against
+    targets you are explicitly authorized to test.
+</div>
+
+<div class="card" id="msf-server-info">
+    <div class="card-title" style="cursor:pointer;display:flex;align-items:center;gap:8px;"
+         onclick="toggleMsfServerInfo()">
+        <span class="expand-icon" id="msf-server-info-icon">▶</span>
+        Server info
+        <span id="msf-server-info-summary" class="text-muted"
+              style="font-weight:400;font-size:11px;letter-spacing:0;">
+            (click to expand)
+        </span>
+    </div>
+    <div id="msf-server-info-body" class="text-muted mono"
+         style="font-size:12px;display:none;margin-top:10px;">
+        Loading…
+    </div>
+</div>
+
+<div class="card" id="msf-guide-card">
+    <div class="card-title" style="cursor:pointer;display:flex;align-items:center;gap:8px;"
+         onclick="toggleMsfGuide()">
+        <span class="expand-icon" id="msf-guide-icon">▶</span>
+        Beginner guide — pick the right module
+        <span class="text-muted" style="font-weight:400;font-size:11px;letter-spacing:0;">
+            (recipe-style, by open service)
+        </span>
+    </div>
+    <div id="msf-guide-body" style="display:none;margin-top:12px;">
+        <p class="text-muted" style="font-size:12px;margin-bottom:10px;">
+            Pick the service you found open on the target. Each recipe lists
+            3–5 hand-picked modules — what they do, what to fill in, and what
+            a successful run looks like. Click <strong>Try this →</strong> on
+            any of them to load it into the module panel on the right.
+        </p>
+        <div class="flex gap-2" style="align-items:center;margin-bottom:12px;">
+            <label class="form-label" style="margin:0;">Service / open port</label>
+            <select class="form-select" id="msf-guide-select"
+                    style="max-width:280px;"
+                    onchange="loadMsfGuide(this.value)">
+                <option value="">— pick a service —</option>
+                {% for s in guide_services %}
+                <option value="{{ s.key }}">
+                    {{ s.title }} · {{ s.module_count }} modules
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div id="msf-guide-content">
+            <p class="text-muted mono" style="font-size:11px;">
+                Choose a service above to see the recommended modules.
+            </p>
+        </div>
+    </div>
+</div>
+
+<div class="msf-layout">
+    <!-- LEFT: search + module list -->
+    <div>
+        <div class="msf-search-card">
+            <div class="card-title">Search modules</div>
+            <form onsubmit="return runMsfSearch(event)">
+                <div class="flex gap-2" style="margin-bottom:8px;">
+                    <input class="form-input" id="msf-search-input"
+                           placeholder="e.g. smb_enum, wordpress, CVE-2024-…"
+                           style="flex:1;">
+                    <select class="form-select" id="msf-search-type" style="max-width:130px;">
+                        <option value="">All types</option>
+                        <option value="auxiliary">Auxiliary</option>
+                        <option value="exploit">Exploit</option>
+                        <option value="post">Post</option>
+                        <option value="payload">Payload</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm">Search</button>
+            </form>
+            <div id="msf-results" class="msf-results">
+                <p class="text-muted mono" style="font-size:11px;">
+                    Enter a query to list matching modules.
+                </p>
+            </div>
+        </div>
+
+        <div class="card" style="margin-top:14px;">
+            <div class="card-title">Recent runs</div>
+            <div id="msf-runs-list">
+                {% if runs %}
+                {% for r in runs %}
+                <div class="msf-result-row" id="msf-run-row-{{ r.id }}"
+                     onclick="loadMsfRun('{{ r.id }}')">
+                    <span class="module-type">{{ r.mode }}</span>
+                    {{ r.module_type }}/{{ r.module_path }}<br>
+                    <span class="text-muted" style="font-size:11px;">
+                        {{ r.started_at.strftime('%Y-%m-%d %H:%M') }}
+                        {% if r.target %} · {{ r.target }}{% endif %}
+                        · <span class="qstatus qstatus-{{ r.status }}">{{ r.status }}</span>
+                    </span>
+                </div>
+                {% endfor %}
+                {% else %}
+                <p class="text-muted mono" style="font-size:11px;">No runs yet.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- RIGHT: selected module + run -->
+    <div>
+        <div id="msf-module-panel" class="card">
+            <p class="text-muted mono" style="font-size:12px;">
+                Select a module from the search results on the left.
+            </p>
+        </div>
+
+        <div id="msf-output-panel" class="card" style="display:none;">
+            <div class="card-title">Output</div>
+            <div id="msf-output-content"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+window.MSF_WORDLISTS = {{ wordlists | tojson }};
+window.MSF_WORDLIST_OPTION_MAP = (function () {
+    var cats = {{ wordlist_option_categories | tojson }};
+    var map = {};
+    Object.keys(cats).forEach(function (cat) {
+        cats[cat].forEach(function (name) { map[name.toUpperCase()] = cat; });
+    });
+    return map;
+})();
+
+function _wordlistsForCategory(cat) {
+    return (window.MSF_WORDLISTS || []).filter(function (w) { return w.category === cat; });
+}
+
+function _buildWordlistPicker(category, inputEl) {
+    var matches = _wordlistsForCategory(category);
+    if (!matches.length) return null;
+    var byService = {};
+    matches.forEach(function (w) {
+        var key = w.service || "generic";
+        (byService[key] = byService[key] || []).push(w);
+    });
+    var orderedKeys = Object.keys(byService).sort(function (a, b) {
+        if (a === "generic") return -1;
+        if (b === "generic") return 1;
+        return a.localeCompare(b);
+    });
+    var sel = document.createElement("select");
+    sel.className = "form-select msf-wordlist-picker";
+    sel.style.marginTop = "4px";
+    sel.style.fontSize = "11px";
+    var html = '<option value="">— pick a bundled wordlist —</option>';
+    orderedKeys.forEach(function (svc) {
+        var label = svc === "generic" ? "Generic" : svc;
+        html += '<optgroup label="' + label + '">';
+        byService[svc].forEach(function (w) {
+            var suffix = w.size ? " · " + w.size : "";
+            html += '<option value="' + w.path + '">' + w.title + suffix + "</option>";
+        });
+        html += "</optgroup>";
+    });
+    sel.innerHTML = html;
+    sel.addEventListener("change", function () {
+        if (this.value) {
+            inputEl.value = this.value;
+            this.value = "";
+        }
+    });
+    return sel;
+}
+
+function enrichWordlistOptions(panel) {
+    if (!panel) return;
+    panel.querySelectorAll(".msf-option").forEach(function (input) {
+        if (input.dataset.wordlistEnriched === "1") return;
+        var name = (input.dataset.optionName || "").toUpperCase();
+        var cat = window.MSF_WORDLIST_OPTION_MAP[name];
+        if (!cat) return;
+        var picker = _buildWordlistPicker(cat, input);
+        if (!picker) return;
+        input.insertAdjacentElement("afterend", picker);
+        input.dataset.wordlistEnriched = "1";
+    });
+}
+
+function _msfModuleCountsHtml(counts) {
+    if (!counts) return "";
+    var labels = [
+        ["exploit", "Exploit"],
+        ["auxiliary", "Auxiliary"],
+        ["post", "Post"],
+        ["payload", "Payload"],
+        ["encoder", "Encoder"],
+        ["nop", "NOP"],
+    ];
+    var total = 0;
+    var pills = labels.map(function (l) {
+        var n = counts[l[0]] || 0;
+        total += n;
+        return '<span class="count-pill mono" style="font-size:11px;">' +
+            n + " " + l[1] + "</span>";
+    }).join(" ");
+    return '<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;">' +
+        '<span class="count-pill mono" style="font-size:11px;border-color:var(--accent);color:var(--accent);">' +
+        total + ' modules total</span>' + pills + "</div>";
+}
+
+function toggleMsfServerInfo() {
+    var body = document.getElementById("msf-server-info-body");
+    var icon = document.getElementById("msf-server-info-icon");
+    if (!body) return;
+    var open = body.style.display === "none" || !body.style.display;
+    body.style.display = open ? "block" : "none";
+    if (icon) icon.classList.toggle("open", open);
+}
+
+function toggleMsfGuide() {
+    var body = document.getElementById("msf-guide-body");
+    var icon = document.getElementById("msf-guide-icon");
+    if (!body) return;
+    var open = body.style.display === "none" || !body.style.display;
+    body.style.display = open ? "block" : "none";
+    if (icon) icon.classList.toggle("open", open);
+}
+
+async function loadMsfGuide(serviceKey) {
+    var slot = document.getElementById("msf-guide-content");
+    if (!slot) return;
+    if (!serviceKey) {
+        slot.innerHTML = '<p class="text-muted mono" style="font-size:11px;">' +
+            "Choose a service above to see the recommended modules.</p>";
+        return;
+    }
+    slot.innerHTML = '<p class="text-muted mono" style="font-size:11px;">Loading recipe…</p>';
+    try {
+        var resp = await fetch("/api/v1/validation/metasploit/guide/" + encodeURIComponent(serviceKey));
+        slot.innerHTML = await resp.text();
+    } catch (e) {
+        slot.innerHTML = '<p class="severity-high mono">Could not load recipe: ' + e.message + "</p>";
+    }
+}
+
+async function refreshMsfStatus() {
+    var el = document.getElementById("msf-status");
+    var body = document.getElementById("msf-server-info-body");
+    var summary = document.getElementById("msf-server-info-summary");
+    el.textContent = "Checking msfrpcd…";
+    el.className = "mono";
+    body.textContent = "Loading…";
+    try {
+        var resp = await fetch("/api/v1/validation/metasploit/status");
+        var d = await resp.json();
+        if (d.connected) {
+            el.innerHTML = '● Connected · <span class="text-muted">' +
+                (d.version || "msfrpcd") + " @ " + d.host + ":" + d.port + "</span>";
+            el.className = "mono msf-status-ok";
+
+            var rows = [
+                ["Metasploit version", d.version || "—"],
+                ["Ruby",               d.ruby || "—"],
+                ["RPC API",            d.api || "—"],
+                ["RPC endpoint",       d.host + ":" + d.port],
+            ];
+            var html = '<table style="font-size:12px;">';
+            rows.forEach(function (r) {
+                html += '<tr><td class="text-muted" style="padding:2px 10px 2px 0;">' +
+                    r[0] + '</td><td class="mono" style="color:var(--text-primary);">' +
+                    r[1] + "</td></tr>";
+            });
+            html += "</table>";
+            html += _msfModuleCountsHtml(d.module_counts);
+            body.innerHTML = html;
+
+            var total = 0;
+            if (d.module_counts) {
+                Object.values(d.module_counts).forEach(function (n) { total += n; });
+            }
+            if (summary) {
+                summary.textContent = "v" + (d.version || "?") +
+                    " · " + total + " modules · click to expand";
+            }
+        } else {
+            el.innerHTML = "● Unreachable · <span class='text-muted'>" +
+                (d.error || "?") + "</span>";
+            el.className = "mono msf-status-bad";
+            body.innerHTML = '<span class="severity-high">Cannot reach msfrpcd:</span> ' +
+                (d.error || "?");
+            if (summary) summary.textContent = "unreachable";
+        }
+    } catch (e) {
+        el.textContent = "● Unreachable · " + e.message;
+        el.className = "mono msf-status-bad";
+        body.innerHTML = '<span class="severity-high">Status request failed:</span> ' + e.message;
+        if (summary) summary.textContent = "error";
+    }
+}
+
+async function runMsfSearch(ev) {
+    ev.preventDefault();
+    var q = document.getElementById("msf-search-input").value.trim();
+    var type = document.getElementById("msf-search-type").value;
+    var box = document.getElementById("msf-results");
+    box.innerHTML = '<p class="text-muted mono" style="font-size:11px;">Searching…</p>';
+    var params = new URLSearchParams({ q: q, limit: "150" });
+    if (type) params.set("module_type", type);
+    var resp = await fetch("/api/v1/validation/metasploit/modules/search?" + params.toString());
+    box.innerHTML = await resp.text();
+    return false;
+}
+
+async function loadMsfModule(modType, modPath) {
+    var panel = document.getElementById("msf-module-panel");
+    panel.innerHTML = '<p class="text-muted mono" style="font-size:11px;">Loading module…</p>';
+    var qs = new URLSearchParams({ module_type: modType, module_path: modPath });
+    var resp = await fetch("/api/v1/validation/metasploit/modules/info?" + qs.toString());
+    if (!resp.ok) {
+        panel.innerHTML = '<p class="severity-high mono">Failed to load module: ' +
+            (await resp.text()) + "</p>";
+        return;
+    }
+    panel.innerHTML = await resp.text();
+    enrichWordlistOptions(panel);
+}
+
+async function runMsfModule(ev) {
+    ev.preventDefault();
+    var form = ev.target;
+    var modType = form.dataset.moduleType;
+    var modPath = form.dataset.modulePath;
+    var mode = form.querySelector('input[name="msf-mode"]:checked').value;
+    var options = {};
+    form.querySelectorAll(".msf-option").forEach(function (input) {
+        var v = input.value;
+        if (v !== "" && v !== null && v !== undefined) {
+            options[input.dataset.optionName] = v;
+        }
+    });
+
+    var btn = form.querySelector("button[type=submit]");
+    if (btn) { btn.disabled = true; btn.textContent = "Running…"; }
+
+    var outPanel = document.getElementById("msf-output-panel");
+    var outContent = document.getElementById("msf-output-content");
+    outPanel.style.display = "block";
+    outContent.innerHTML = '<p class="text-muted mono" style="font-size:12px;">Running ' +
+        modType + "/" + modPath + " (" + mode + ")…</p>";
+
+    var resp = await fetch("/api/v1/validation/metasploit/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            module_type: modType,
+            module_path: modPath,
+            mode: mode,
+            options: options,
+        }),
+    });
+    if (!resp.ok) {
+        outContent.innerHTML = '<p class="severity-high mono">Run failed: ' +
+            (await resp.text()) + "</p>";
+    } else {
+        outContent.innerHTML = await resp.text();
+        // refresh history list so the new row appears
+        location.reload();
+    }
+    if (btn) { btn.disabled = false; btn.textContent = "▶ Run module"; }
+    return false;
+}
+
+async function loadMsfRun(runId) {
+    var resp = await fetch("/api/v1/validation/metasploit/runs/" + runId);
+    var outPanel = document.getElementById("msf-output-panel");
+    var outContent = document.getElementById("msf-output-content");
+    outPanel.style.display = "block";
+    outContent.innerHTML = await resp.text();
+}
+
+document.addEventListener("DOMContentLoaded", refreshMsfStatus);
+</script>
+{% endblock %}

@@ -1,0 +1,273 @@
+{% extends "base.html" %}
+{% block title %}Findings — AI Assist Tool{% endblock %}
+{% block heading %}Findings{% endblock %}
+
+{% block actions %}
+<button class="btn btn-secondary btn-sm" type="button" onclick="selectAllFindings(true)">Select all</button>
+<button class="btn btn-secondary btn-sm" type="button" onclick="selectAllFindings(false)">Clear</button>
+<button id="export-findings-btn" class="btn btn-secondary" type="button"
+        onclick="exportFindingsReport()" disabled>
+    ↓ Export Report (<span id="export-selected-count">0</span>)
+</button>
+{% endblock %}
+
+{% block content %}
+<style>
+    .tab-row { display:flex; gap:4px; margin:0 0 16px 0;
+        border-bottom:1px solid var(--border, #2a2a2a);
+        font-family: ui-monospace, Menlo, Monaco, Consolas, monospace; font-size:13px; }
+    .tab-row .tab { padding:8px 14px; color:var(--text-muted,#9aa0a6);
+        text-decoration:none; border-bottom:2px solid transparent; margin-bottom:-1px; }
+    .tab-row .tab:hover { color:var(--text,#e6e6e6); }
+    .tab-row .tab.active { color:var(--accent,#4f8cff);
+        border-bottom-color:var(--accent,#4f8cff); font-weight:600; }
+    .tab-row .tab .count { color:var(--text-muted,#9aa0a6); margin-left:4px; }
+    .tab-row .tab.active .count { color:var(--accent,#4f8cff); }
+    .row-suppressed td { opacity: 0.6; }
+</style>
+
+<nav class="tab-row">
+    <a class="tab {% if view == 'open' %}active{% endif %}"
+       href="/api/v1/validation/findings?status=open">Open<span class="count">({{ open_count }})</span></a>
+    <a class="tab {% if view == 'suppressed' %}active{% endif %}"
+       href="/api/v1/validation/findings?status=suppressed">Suppressed<span class="count">({{ suppressed_count }})</span></a>
+    <a class="tab {% if view == 'all' %}active{% endif %}"
+       href="/api/v1/validation/findings?status=all">All<span class="count">({{ total_count }})</span></a>
+</nav>
+
+{# ── Investigation workspace entry point ────────────────────────────── #}
+<div style="margin-bottom:12px;padding:8px 12px;background:color-mix(in srgb, var(--accent) 5%, var(--bg-raised));border:1px solid color-mix(in srgb, var(--accent) 25%, var(--border));border-radius:var(--radius);display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;color:var(--text-secondary);">
+    <span>◉ This is the aggregate findings view. For per-target investigation, scan timeline, guided actions, and learning paths — use the Investigation Workspace.</span>
+    <a href="/api/v1/validation/investigations" class="btn btn-primary btn-sm" style="flex-shrink:0;">Open Workspace →</a>
+</div>
+
+<div class="stats-row">
+    <div class="stat-card" style="border-color:rgba(239,68,68,0.3)"><div class="stat-value" style="color:var(--critical)">{{ severity_counts.get('critical',0) }}</div><div class="stat-label">Critical</div></div>
+    <div class="stat-card" style="border-color:rgba(249,115,22,0.3)"><div class="stat-value" style="color:var(--high)">{{ severity_counts.get('high',0) }}</div><div class="stat-label">High</div></div>
+    <div class="stat-card" style="border-color:rgba(234,179,8,0.3)"><div class="stat-value" style="color:var(--medium)">{{ severity_counts.get('medium',0) }}</div><div class="stat-label">Medium</div></div>
+    <div class="stat-card" style="border-color:rgba(34,197,94,0.3)"><div class="stat-value" style="color:var(--low)">{{ severity_counts.get('low',0) }}</div><div class="stat-label">Low</div></div>
+    <div class="stat-card"><div class="stat-value">{{ status_counts.get('validated_exploitable',0) }}</div><div class="stat-label">Confirmed</div></div>
+    <div class="stat-card"><div class="stat-value">{{ status_counts.get('validated_not_exploitable',0) }}</div><div class="stat-label">Not Exploitable</div></div>
+    <div class="stat-card"><div class="stat-value">{{ suppressed_count }}</div><div class="stat-label">Suppressed</div></div>
+</div>
+
+<div class="card">
+    <div class="card-title">Findings — Grouped by Host</div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th style="width:24px;"></th>
+                    <th>Host</th>
+                    <th colspan="2">Severity / Exploitable</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for g in groups %}
+                <tr class="host-group-header expandable-row" onclick="toggleFindingGroup('{{ g.host_id }}', this)">
+                    <td><span class="expand-icon" id="fnd-icon-{{ g.host_id }}">▶</span></td>
+                    <td class="mono">
+                        {% if g.asset_name %}
+                        <strong>{{ g.asset_name }}</strong>
+                        <span class="text-muted" style="font-size:11px;">{{ g.host.ip if g.host else g.host_id[:8] }}</span>
+                        {% else %}
+                        {{ g.host.ip if g.host else g.host_id[:8] }}
+                        {% endif %}
+                    </td>
+                    <td colspan="2">
+                        <span class="host-group-counts">
+                            <span class="count-pill critical">{{ g.critical }} critical</span>
+                            <span class="count-pill high">{{ g.high }} high</span>
+                            <span class="count-pill medium">{{ g.medium }} medium</span>
+                            <span class="count-pill low">{{ g.low }} low</span>
+                            <span class="count-pill">{{ g.exploitable }} exploitable</span>
+                        </span>
+                        {% if g.host %}
+                        <a href="/api/v1/validation/investigations/workspace?target={{ g.host.ip }}#findings"
+                           class="btn btn-secondary btn-sm"
+                           style="margin-left:8px;font-size:11px;padding:2px 7px;"
+                           onclick="event.stopPropagation()">
+                            ◉ Workspace
+                        </a>
+                        {% endif %}
+                    </td>
+                </tr>
+                <tr class="sub-row" id="fnd-rows-{{ g.host_id }}" style="display:none;">
+                    <td colspan="4">
+                        <div class="sub-table">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th style="width:24px;">
+                                            <input type="checkbox" class="fnd-group-cb"
+                                                   data-group="{{ g.host_id }}"
+                                                   onclick="toggleFindingGroupCheckboxes(this)"
+                                                   title="Select all in this group">
+                                        </th>
+                                        <th>Port</th>
+                                        <th>Type</th>
+                                        <th>CVE</th>
+                                        <th>Severity</th>
+                                        <th>Result</th>
+                                        <th>Status</th>
+                                        <th>Time</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for f in g["items"] %}
+                                    <tr data-finding-id="{{ f.id }}" {% if f.status == 'suppressed' %}class="row-suppressed"{% endif %}>
+                                        <td>
+                                            <input type="checkbox" class="fnd-cb"
+                                                   data-group="{{ g.host_id }}"
+                                                   value="{{ f.id }}"
+                                                   onclick="onFindingCheckboxToggle(this)">
+                                        </td>
+                                        <td class="mono">{{ f.service.port if f.service else "—" }}</td>
+                                        <td class="mono" style="font-size:12px;">{{ f.finding_type }}</td>
+                                        <td>{% if f.cve_id %}<span class="mono" style="font-size:12px;">{{ f.cve_id }}</span>{% else %}—{% endif %}</td>
+                                        <td><span class="severity severity-{{ f.severity }}">{{ f.severity }}</span></td>
+                                        <td>
+                                            {% if f.validation_status == 'validated_exploitable' %}
+                                            <span class="vstatus vstatus-exploitable">● EXPLOITABLE</span>
+                                            {% elif f.validation_status == 'validated_not_exploitable' %}
+                                            <span class="vstatus vstatus-not-exploitable">● NOT EXPLOITABLE</span>
+                                            {% else %}
+                                            <span class="vstatus vstatus-matched">◌ MATCHED</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if f.status == 'suppressed' %}
+                                            <span class="qstatus qstatus-suppressed"
+                                                title="{{ f.environment_context or 'Suppressed by a known-issue rule' }}">SUPPRESSED</span>
+                                            {% else %}
+                                            <span class="qstatus qstatus-{{ f.status }}">{{ f.status }}</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-muted mono" style="font-size:11px;">{{ f.timestamp.strftime('%m-%d %H:%M') }}</td>
+                                        <td>
+                                            <a href="/api/v1/validation/findings/{{ f.id }}{% if g.host %}?from_target={{ g.host.ip }}{% endif %}"
+                                               class="btn btn-secondary btn-sm">Detail</a>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" class="empty-state">No findings yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+function toggleFindingGroup(hostId, headerEl) {
+    var sub = document.getElementById("fnd-rows-" + hostId);
+    var icon = document.getElementById("fnd-icon-" + hostId);
+    if (!sub) return;
+    var hidden = sub.style.display === "none";
+    sub.style.display = hidden ? "table-row" : "none";
+    if (icon) { icon.classList.toggle("open", hidden); }
+}
+
+function getSelectedFindingIds() {
+    return Array.from(document.querySelectorAll(".fnd-cb:checked"))
+        .map(function (cb) { return cb.value; })
+        .filter(function (v) { return !!v; });
+}
+
+function updateExportCount() {
+    var n = document.querySelectorAll(".fnd-cb:checked").length;
+    var label = document.getElementById("export-selected-count");
+    if (label) label.textContent = String(n);
+    var btn = document.getElementById("export-findings-btn");
+    if (btn) btn.disabled = (n === 0);
+}
+
+function syncGroupHeaderCheckbox(groupId) {
+    var header = document.querySelector('.fnd-group-cb[data-group="' + groupId + '"]');
+    if (!header) return;
+    var boxes = document.querySelectorAll('.fnd-cb[data-group="' + groupId + '"]');
+    var total = boxes.length;
+    var checked = Array.from(boxes).filter(function (b) { return b.checked; }).length;
+    header.checked = (total > 0 && checked === total);
+    header.indeterminate = (checked > 0 && checked < total);
+}
+
+function onFindingCheckboxToggle(cb) {
+    syncGroupHeaderCheckbox(cb.getAttribute("data-group"));
+    updateExportCount();
+}
+
+function toggleFindingGroupCheckboxes(headerCb) {
+    var groupId = headerCb.getAttribute("data-group");
+    var state = headerCb.checked;
+    document.querySelectorAll('.fnd-cb[data-group="' + groupId + '"]')
+        .forEach(function (cb) { cb.checked = state; });
+    updateExportCount();
+}
+
+function selectAllFindings(state) {
+    document.querySelectorAll(".fnd-cb").forEach(function (cb) { cb.checked = state; });
+    document.querySelectorAll(".fnd-group-cb").forEach(function (cb) {
+        cb.checked = state; cb.indeterminate = false;
+    });
+    updateExportCount();
+}
+
+function exportFindingsReport() {
+    var ids = getSelectedFindingIds();
+    if (ids.length === 0) {
+        alert("Select at least one finding to export.");
+        return;
+    }
+    var title = window.prompt(
+        "Report title:",
+        "Findings Report (" + ids.length + " selected)"
+    );
+    if (title === null) return;
+    var preparedBy = window.prompt("Prepared by (optional):", "") || null;
+
+    var body = JSON.stringify({
+        finding_ids: ids,
+        prepared_by: preparedBy,
+        title: title || "Findings Report"
+    });
+
+    var btn = document.getElementById("export-findings-btn");
+    if (btn) { btn.disabled = true; btn.classList.add("htmx-request"); }
+
+    fetch("/api/v1/validation/reports/generate/findings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: body
+    }).then(function (resp) {
+        if (!resp.ok) {
+            return resp.text().then(function (t) { throw new Error(t || resp.statusText); });
+        }
+        return resp.blob();
+    }).then(function (blob) {
+        var url = window.URL.createObjectURL(blob);
+        var a = document.createElement("a");
+        a.href = url;
+        var stamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+        a.download = "findings_report_" + stamp + ".pdf";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    }).catch(function (err) {
+        alert("Export failed: " + err.message);
+    }).finally(function () {
+        if (btn) { btn.classList.remove("htmx-request"); }
+        updateExportCount();
+    });
+}
+
+document.addEventListener("DOMContentLoaded", updateExportCount);
+</script>
+{% endblock %}

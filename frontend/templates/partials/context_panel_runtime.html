@@ -1,0 +1,120 @@
+{# Phase 43 — context panel for runtime pseudo-nodes (bootstrap stages,
+   execution stages, execution results).
+
+   These nodes live only in the in-memory runtime store, not in the
+   assembler's view. The panel surfaces their reasoning record:
+   actions performed, tools used, what was detected, confidence,
+   what they spawned downstream.
+
+   Operator question this answers:
+     "What did this node actually do, and what did it conclude?"
+
+   Context provided by _runtime_context_panel():
+     title       (str)
+     subtitle    (str)   — e.g. "investigation bootstrap", "execution stage"
+     status      (str)   — running | completed | failed | discovered
+     actions     (list[str])
+     tools       (list[str])
+     detected    (list[str])
+     confidence  (str)
+     spawned     (list[str])
+     kind        (str)
+#}
+
+<div class="space-y-3 text-[#1f2328] text-xs">
+
+  {# ── Header ─────────────────────────────────────────────────────── #}
+  <div>
+    <div class="text-zinc-500 uppercase text-[10px] tracking-wide mb-0.5">
+      {{ subtitle or "Runtime step" }}
+    </div>
+    <div class="text-sm font-semibold text-[#1f2328]">{{ title }}</div>
+    {% if status == 'running' %}
+      <div class="mt-1 text-amber-700 text-[11px]">▸ in progress</div>
+    {% elif status == 'failed' %}
+      <div class="mt-1 text-red-600 text-[11px]">✕ failed</div>
+    {% elif status == 'discovered' %}
+      <div class="mt-1 text-[#0969da] text-[11px]">◆ detected</div>
+    {% elif status == 'completed' %}
+      <div class="mt-1 text-[#1a7f37] text-[11px]">✓ completed</div>
+    {% endif %}
+  </div>
+
+  {# ── Actions performed ─────────────────────────────────────────── #}
+  {% if actions %}
+  <div>
+    <div class="text-zinc-500 uppercase text-[10px] tracking-wide mb-1">Actions</div>
+    <ul class="space-y-0.5 font-mono text-[11px] text-[#1f2328]">
+      {% for a in actions %}
+        <li class="flex items-start gap-1.5">
+          <span class="text-zinc-500">·</span>
+          <span>{{ a }}</span>
+        </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {# ── Tools ─────────────────────────────────────────────────────── #}
+  {% if tools %}
+  <div>
+    <div class="text-zinc-500 uppercase text-[10px] tracking-wide mb-1">Tools</div>
+    <div class="flex flex-wrap gap-1">
+      {% for t in tools %}
+        <span class="inline-block px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 text-[10px] font-mono">{{ t }}</span>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {# ── Detected ─────────────────────────────────────────────────── #}
+  {% if detected %}
+  <div>
+    <div class="text-zinc-500 uppercase text-[10px] tracking-wide mb-1">Detected</div>
+    <ul class="space-y-0.5 font-mono text-[11px] text-[#0969da]">
+      {% for d in detected %}
+        <li class="flex items-start gap-1.5">
+          <span class="text-[#0969da]">◆</span>
+          <span>{{ d }}</span>
+        </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {# ── Confidence ───────────────────────────────────────────────── #}
+  {% if confidence and confidence != '—' %}
+  <div class="flex items-center gap-2">
+    <span class="text-zinc-500 uppercase text-[10px] tracking-wide">Confidence</span>
+    <span class="text-[#1f2328] text-[11px]">{{ confidence }}</span>
+  </div>
+  {% endif %}
+
+  {# ── Spawned (what this step caused) ──────────────────────────── #}
+  {% if spawned %}
+  <div>
+    <div class="text-zinc-500 uppercase text-[10px] tracking-wide mb-1">Spawned</div>
+    <ul class="space-y-0.5 text-[11px] text-[#1f2328]">
+      {% for s in spawned %}
+        <li class="flex items-start gap-1.5">
+          <span class="text-[#1a7f37]">→</span>
+          <span>{{ s }}</span>
+        </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {# ── Memory-loss notice ───────────────────────────────────────── #}
+  {% if not actions and not tools and not detected and not spawned %}
+  <div class="text-zinc-500 text-[11px] italic">
+    {% if subtitle == 'no longer in runtime memory' %}
+      The runtime no longer holds the reasoning record for this step
+      (process restart since the step ran).
+    {% else %}
+      No additional reasoning recorded for this step.
+    {% endif %}
+  </div>
+  {% endif %}
+
+</div>

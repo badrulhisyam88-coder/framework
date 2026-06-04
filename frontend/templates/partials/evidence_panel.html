@@ -1,0 +1,188 @@
+{#
+  Partial: evidence_panel.html
+  Context: investigation, artifacts, artifact_count, artifact_type_labels, artifact_types
+  Usage: hx-get="/api/v1/validation/investigation-core/investigations/{id}/evidence/partial"
+#}
+<div class="evidence-panel" id="evidence-panel">
+
+  {# ── Capture form ──────────────────────────────────────────────────── #}
+  <div class="evidence-capture-form">
+    <div class="ep-form-header">
+      <span style="font-weight:600;font-size:.82rem;">Capture Evidence</span>
+      <span style="font-size:.7rem;color:var(--text-muted);">Record what you observe</span>
+    </div>
+    <div class="ep-form-body">
+      <div class="ep-form-row">
+        <div class="ep-field" style="flex:2;">
+          <label class="form-label">Title</label>
+          <input class="form-input" id="ev-title" placeholder="e.g. SQLi error response">
+        </div>
+        <div class="ep-field" style="flex:1;">
+          <label class="form-label">Type</label>
+          <select class="form-select" id="ev-type">
+            {% for at in artifact_types %}
+              <option value="{{ at }}">
+                {{ artifact_type_labels.get(at, at) }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div class="ep-field">
+        <label class="form-label">Content</label>
+        <textarea class="form-input ep-content"
+                  id="ev-content"
+                  rows="4"
+                  placeholder="Paste request, response, payload, output, or write a note…"></textarea>
+      </div>
+      <div class="ep-field">
+        <label class="form-label">Description <span style="color:var(--text-muted);font-size:.7rem;">(optional)</span></label>
+        <input class="form-input" id="ev-desc" placeholder="Brief context — what does this show?">
+      </div>
+      <button class="btn btn-primary btn-sm"
+              type="button"
+              onclick="captureEvidence('{{ investigation.investigation_id }}')">
+        + Capture
+      </button>
+      <span id="ev-status" style="font-size:.75rem;margin-left:.5rem;"></span>
+    </div>
+  </div>
+
+  {# ── Artifact list ──────────────────────────────────────────────────── #}
+  {% if artifacts %}
+    <div class="ep-list" id="ev-artifact-list">
+      {% for a in artifacts %}
+        <div class="ep-artifact ep-artifact--{{ a.artifact_type }}" id="ev-{{ a.evidence_id }}">
+          <div class="ep-artifact-header">
+            <span class="ep-type-badge">
+              {{ artifact_type_labels.get(a.artifact_type, a.artifact_type) }}
+            </span>
+            <span class="ep-artifact-title">{{ a.title }}</span>
+            <span class="ep-artifact-ts" title="{{ a.created_at }}">
+              {{ a.created_at | string | truncate(16, killwords=True, end='') }}
+            </span>
+            <button class="ep-delete-btn"
+                    title="Delete evidence"
+                    hx-delete="/api/v1/validation/investigation-core/investigations/{{ investigation.investigation_id }}/evidence/{{ a.evidence_id }}"
+                    hx-target="#ev-{{ a.evidence_id }}"
+                    hx-swap="outerHTML"
+                    hx-confirm="Delete this evidence artifact?">✕</button>
+          </div>
+          {% if a.description %}
+            <p class="ep-description">{{ a.description }}</p>
+          {% endif %}
+          {% if a.content %}
+            {% if a.is_preformatted %}
+              <pre class="ep-content-pre">{{ a.content | e }}</pre>
+            {% else %}
+              <p class="ep-content-text">{{ a.content }}</p>
+            {% endif %}
+          {% endif %}
+          {% if a.tags %}
+            <div class="ep-tags">
+              {% for tag in a.tags %}
+                <span class="tag-chip">{{ tag }}</span>
+              {% endfor %}
+            </div>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty-state" style="padding:1.5rem 0;">
+      <span class="empty-state-icon">◈</span>
+      <p>No evidence captured yet. Use the form above to document what you observe.</p>
+    </div>
+  {% endif %}
+</div>
+
+<script>
+function captureEvidence(invId) {
+  var title   = document.getElementById('ev-title').value.trim();
+  var type    = document.getElementById('ev-type').value;
+  var content = document.getElementById('ev-content').value.trim();
+  var desc    = document.getElementById('ev-desc').value.trim();
+  var status  = document.getElementById('ev-status');
+  if (!title || !content) { status.textContent = 'Title and content are required.'; return; }
+  status.textContent = 'Saving…';
+  fetch('/api/v1/validation/investigation-core/investigations/' + invId + '/evidence', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ artifact_type: type, title: title, content: content, description: desc })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (data.detail) { status.textContent = 'Error: ' + data.detail; return; }
+    status.textContent = '✓ Captured';
+    document.getElementById('ev-title').value = '';
+    document.getElementById('ev-content').value = '';
+    document.getElementById('ev-desc').value = '';
+    // Reload the panel to show the new artifact
+    htmx.trigger(document.getElementById('evidence-panel'), 'reload-evidence');
+    setTimeout(function() { status.textContent = ''; }, 3000);
+  })
+  .catch(function() { status.textContent = 'Network error.'; });
+}
+</script>
+
+<style>
+.evidence-panel { padding: .25rem 0; }
+.evidence-capture-form {
+  background: color-mix(in srgb, var(--accent) 4%, var(--bg-raised));
+  border: 1px solid var(--border); border-radius: 6px;
+  margin-bottom: .85rem; overflow: hidden;
+}
+.ep-form-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: .6rem .85rem; border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.ep-form-body { padding: .7rem .85rem; display: flex; flex-direction: column; gap: .45rem; }
+.ep-form-row { display: flex; gap: .5rem; flex-wrap: wrap; }
+.ep-field { display: flex; flex-direction: column; gap: .2rem; flex: 1; min-width: 140px; }
+.ep-content { font-family: var(--mono); font-size: .75rem; resize: vertical; min-height: 70px; }
+.ep-list { display: flex; flex-direction: column; gap: .5rem; }
+.ep-artifact {
+  background: var(--bg-raised); border: 1px solid var(--border);
+  border-radius: 5px; overflow: hidden;
+}
+.ep-artifact--payload_attempt { border-left: 3px solid var(--medium); }
+.ep-artifact--http_request    { border-left: 3px solid var(--accent); }
+.ep-artifact--http_response   { border-left: 3px solid var(--low); }
+.ep-artifact--terminal_output { border-left: 3px solid var(--text-muted); }
+.ep-artifact--note            { border-left: 3px solid var(--warning); }
+.ep-artifact-header {
+  display: flex; align-items: center; gap: .5rem;
+  padding: .4rem .65rem; border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.ep-type-badge {
+  font-size: .65rem; font-family: var(--mono); font-weight: 600;
+  text-transform: uppercase; letter-spacing: .05em;
+  color: var(--text-muted); background: var(--bg-raised);
+  border: 1px solid var(--border); border-radius: 3px; padding: 1px 5px;
+}
+.ep-artifact-title { font-size: .8rem; font-weight: 500; flex: 1; }
+.ep-artifact-ts { font-size: .68rem; color: var(--text-muted); font-family: var(--mono); }
+.ep-delete-btn {
+  background: none; border: none; color: var(--text-muted); cursor: pointer;
+  font-size: .75rem; padding: 0 .25rem; line-height: 1;
+}
+.ep-delete-btn:hover { color: var(--critical); }
+.ep-description {
+  font-size: .75rem; color: var(--text-secondary);
+  padding: .35rem .65rem 0; margin: 0;
+}
+.ep-content-pre {
+  font-family: var(--mono); font-size: .72rem; color: var(--text-primary);
+  padding: .5rem .65rem; margin: 0; overflow-x: auto; white-space: pre-wrap;
+  word-break: break-all; border-top: 1px solid var(--border);
+  background: color-mix(in srgb, black 15%, var(--bg-raised));
+  max-height: 16rem;
+}
+.ep-content-text {
+  font-size: .78rem; color: var(--text-secondary);
+  padding: .35rem .65rem; margin: 0; border-top: 1px solid var(--border);
+}
+.ep-tags { display: flex; gap: .3rem; flex-wrap: wrap; padding: .3rem .65rem; }
+</style>

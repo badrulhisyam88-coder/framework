@@ -1,0 +1,78 @@
+{#
+  Partial: run_timeline_fragment.html
+  Context: run (InvestigationRun), events (list of annotated event dicts),
+           scanner_stage_labels, confidence, confidence_msg
+  Usage: hx-get="/api/v1/validation/scanner/runs/{group_id}/timeline-partial"
+         loaded lazily when user expands an investigation run row
+#}
+<div class="so-tl">
+
+  {% if events %}
+    {% for item in events %}
+      {# ── Stage header when scanner changes ────────────────────── #}
+      {% if item.new_stage and item.scanner_type %}
+      <div class="so-tl-stage-header">
+        {{ scanner_stage_labels.get(item.scanner_type, item.scanner_type | title) }}
+      </div>
+      {% endif %}
+
+      {# ── Event row ────────────────────────────────────────────── #}
+      {%- set e = item.event -%}
+      <div class="so-tl-row so-tl-row--{{ e.event_type | replace('_', '-') }}">
+        <span class="so-tl-icon">
+          {%- if e.event_type in ('scan_completed', 'target_reachable', 'findings_normalized') -%}✓
+          {%- elif e.event_type in ('scan_failed', 'target_unreachable') -%}✗
+          {%- elif e.event_type == 'target_fingerprinted' -%}◉
+          {%- elif e.event_type == 'scan_started' -%}▶
+          {%- elif e.event_type == 'target_resolved' -%}→
+          {%- elif e.event_type == 'scan_queued' -%}●
+          {%- else -%}·{%- endif -%}
+        </span>
+        <span class="so-tl-label">{{ e.summary }}</span>
+        <span class="so-tl-time mono">{{ e.timestamp.strftime('%H:%M:%S') }}</span>
+      </div>
+    {% endfor %}
+  {% else %}
+    <div class="so-tl-empty">No execution events recorded yet.</div>
+  {% endif %}
+
+  {# ── Run-level confidence summary ─────────────────────────────── #}
+  {% if run.is_terminal %}
+  <div class="so-tl-summary so-tl-summary--{{ confidence }}">
+    <span class="so-tl-conf">
+      {%- if confidence == 'ok' -%}✓
+      {%- elif confidence == 'warn' -%}⚠
+      {%- else -%}✗{%- endif -%}
+      &nbsp;{{ confidence_msg }}
+    </span>
+    {% if run.duration_seconds %}
+      <span class="so-tl-dur">{{ run.duration_seconds | round | int }}s</span>
+    {% endif %}
+    <span class="so-tl-evidence">
+      · {{ run.stages_complete }}/{{ run.stage_count }} stages complete
+      {% if run.total_findings > 0 %}
+        · {{ run.total_findings }} finding(s) linked
+      {% endif %}
+    </span>
+  </div>
+  {% elif not run.is_terminal %}
+  <div class="so-tl-summary so-tl-summary--pending">
+    <span class="so-tl-conf">⟳ &nbsp;{{ confidence_msg }}</span>
+    <span class="so-tl-dur" style="font-size:.63rem;color:var(--text-muted);">
+      Re-expand for latest state
+    </span>
+  </div>
+  {% endif %}
+
+</div>
+
+<style>
+/* Stage header between scanner groups */
+.so-tl-stage-header {
+  font-size: .63rem; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--text-muted); font-family: var(--mono);
+  margin-top: .45rem; margin-bottom: .1rem;
+  padding-top: .35rem; border-top: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+}
+.so-tl-stage-header:first-child { margin-top: 0; border-top: none; }
+</style>

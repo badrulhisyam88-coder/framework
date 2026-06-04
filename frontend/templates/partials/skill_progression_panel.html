@@ -1,0 +1,155 @@
+{#
+  Partial: skill_progression_panel.html
+  Context: investigation, recommendations (list[SkillRecommendation]), next_skill,
+           mastery_by_skill, mastery_status_labels
+  Usage: hx-get="/api/v1/validation/investigation-core/investigations/{id}/skills/partial"
+#}
+<div class="sp-panel">
+
+  {# ── Recommended Next Skill ─────────────────────────────────────── #}
+  {% if next_skill %}
+    <div class="sp-next-card">
+      <div class="sp-next-label">Recommended Next Skill</div>
+      <div class="sp-next-title">{{ next_skill.title }}</div>
+      <div class="sp-next-meta">
+        <span class="sp-diff sp-diff--{{ next_skill.difficulty }}">{{ next_skill.difficulty }}</span>
+        <span class="sp-cat">{{ next_skill.category | replace('_', ' ') }}</span>
+      </div>
+      <p class="sp-next-desc">{{ next_skill.description }}</p>
+      {% if next_skill.evidence_requirements %}
+        <div class="sp-next-evidence">
+          <strong>To demonstrate mastery:</strong>
+          <ul>
+            {% for req in next_skill.evidence_requirements %}
+              <li>{{ req.description or (req.artifact_type ~ " ×" ~ req.minimum_count) }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+      {% if next_skill.related_learning_paths %}
+        <div class="sp-next-links">
+          Related paths:
+          {% for pid in next_skill.related_learning_paths %}
+            <code class="tag-chip">{{ pid }}</code>
+          {% endfor %}
+        </div>
+      {% endif %}
+    </div>
+  {% endif %}
+
+  {# ── Skill progression list ──────────────────────────────────────── #}
+  {% if not recommendations %}
+    <div class="empty-state" style="padding:1.5rem 0;">
+      <span class="empty-state-icon">◆</span>
+      <p>No skill data yet. Run a scan and capture evidence to begin tracking progression.</p>
+    </div>
+  {% else %}
+    {# Group by category #}
+    {% set categories = recommendations | map(attribute='skill.category') | unique | list %}
+    {% for cat in categories %}
+      <div class="sp-category">
+        <div class="sp-cat-label">{{ cat | replace('_', ' ') | title }}</div>
+        {% for rec in recommendations if rec.skill.category == cat %}
+          {% set m = mastery_by_skill.get(rec.skill.skill_id) %}
+          {% set status = m.status if m else 'locked' %}
+          <div class="sp-skill-row sp-skill--{{ status }}">
+            <span class="sp-status-icon">
+              {%- if status == 'mastered' -%}★
+              {%- elif status == 'completed' -%}✓
+              {%- elif status == 'in_progress' -%}●
+              {%- elif status == 'available' -%}○
+              {%- else -%}🔒{%- endif -%}
+            </span>
+            <div class="sp-skill-info">
+              <span class="sp-skill-title">{{ rec.skill.title }}</span>
+              <span class="sp-diff sp-diff--{{ rec.skill.difficulty }}">{{ rec.skill.difficulty }}</span>
+              {% if rec.matched_finding_types %}
+                <span class="sp-match-hint">
+                  matched: {{ rec.matched_finding_types | join(', ') }}
+                </span>
+              {% endif %}
+            </div>
+            {% if m and m.confidence_score > 0 %}
+              <div class="sp-conf-bar" title="{{ (m.confidence_score * 100) | round | int }}% confidence">
+                <div class="sp-conf-fill sp-conf-fill--{{ status }}"
+                     style="width:{{ (m.confidence_score * 100) | round | int }}%"></div>
+              </div>
+              <span class="sp-conf-label">{{ (m.confidence_score * 100) | round | int }}%</span>
+            {% endif %}
+            {% if status == 'available' or status == 'in_progress' %}
+              <button class="btn btn-secondary btn-sm sp-validate-btn"
+                hx-post="/api/v1/validation/investigation-core/investigations/{{ investigation.investigation_id }}/skills/{{ rec.skill.skill_id }}/validate"
+                hx-target="closest .sp-skill-row"
+                hx-swap="outerHTML"
+                title="Mark as mastered">
+                ★
+              </button>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    {% endfor %}
+  {% endif %}
+</div>
+
+<style>
+.sp-panel { padding: .25rem 0; }
+
+/* Next skill card */
+.sp-next-card {
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg-raised));
+  border: 1px solid var(--accent); border-radius: 6px;
+  padding: .75rem .9rem; margin-bottom: .85rem;
+}
+.sp-next-label { font-size: .65rem; text-transform: uppercase; letter-spacing: .08em;
+                  color: var(--accent); margin-bottom: .3rem; font-weight: 600; }
+.sp-next-title { font-size: .95rem; font-weight: 700; margin-bottom: .3rem; }
+.sp-next-meta  { display: flex; align-items: center; gap: .4rem; margin-bottom: .4rem; }
+.sp-cat        { font-size: .68rem; color: var(--text-muted); font-family: var(--mono);
+                  text-transform: capitalize; }
+.sp-next-desc  { font-size: .78rem; color: var(--text-secondary); margin: 0 0 .45rem; }
+.sp-next-evidence { font-size: .72rem; }
+.sp-next-evidence strong { font-size: .68rem; text-transform: uppercase;
+                            letter-spacing: .05em; color: var(--text-muted); }
+.sp-next-evidence ul { margin: .2rem 0 0 1rem; padding: 0; }
+.sp-next-evidence li { color: var(--text-secondary); margin-bottom: .1rem; }
+.sp-next-links { font-size: .7rem; color: var(--text-muted); margin-top: .35rem; }
+
+/* Difficulty badges */
+.sp-diff { font-size: .62rem; font-family: var(--mono); border-radius: 3px;
+           padding: 1px 5px; border: 1px solid; text-transform: uppercase; }
+.sp-diff--beginner     { color: var(--low); border-color: var(--low); }
+.sp-diff--intermediate { color: var(--medium); border-color: var(--medium); }
+.sp-diff--advanced     { color: var(--high); border-color: var(--high); }
+
+/* Category groups */
+.sp-category     { margin-bottom: .6rem; }
+.sp-cat-label    { font-size: .65rem; text-transform: uppercase; letter-spacing: .08em;
+                   color: var(--text-muted); padding: .2rem 0; margin-bottom: .2rem;
+                   border-bottom: 1px solid var(--border); }
+.sp-skill-row    { display: flex; align-items: center; gap: .5rem; padding: .35rem .1rem;
+                   border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent); }
+.sp-skill-row:last-child { border-bottom: none; }
+.sp-skill--locked    { opacity: .45; }
+.sp-skill--available { opacity: .85; }
+.sp-skill--mastered  { background: color-mix(in srgb, var(--low) 5%, transparent);
+                       border-radius: 4px; }
+.sp-status-icon { font-size: .8rem; width: 1rem; text-align: center; flex-shrink: 0; }
+.sp-skill--mastered   .sp-status-icon { color: var(--low); }
+.sp-skill--completed  .sp-status-icon { color: var(--low); }
+.sp-skill--in_progress .sp-status-icon { color: var(--accent); }
+.sp-skill--available  .sp-status-icon { color: var(--text-muted); }
+.sp-skill-info   { display: flex; align-items: center; gap: .35rem; flex: 1; flex-wrap: wrap;
+                   min-width: 0; }
+.sp-skill-title  { font-size: .78rem; font-weight: 500; }
+.sp-match-hint   { font-size: .65rem; color: var(--text-muted); font-family: var(--mono); }
+.sp-conf-bar     { width: 4rem; height: 4px; background: var(--border);
+                   border-radius: 2px; overflow: hidden; flex-shrink: 0; }
+.sp-conf-fill    { height: 100%; background: var(--text-muted); }
+.sp-conf-fill--in_progress { background: var(--accent); }
+.sp-conf-fill--completed   { background: var(--low); }
+.sp-conf-fill--mastered    { background: var(--low); }
+.sp-conf-label   { font-size: .65rem; color: var(--text-muted); font-family: var(--mono);
+                   width: 2.2rem; text-align: right; }
+.sp-validate-btn { padding: .15rem .4rem !important; font-size: .7rem !important; }
+</style>

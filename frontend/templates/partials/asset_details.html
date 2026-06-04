@@ -1,0 +1,173 @@
+{# Inputs: asset, hosts, ports[{host,service,findings[]}], findings[], status_choices, recon_results #}
+
+{# ── Investigation Workspace entry ───────────────────────────────── #}
+<div style="margin-bottom:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+    <a href="/api/v1/validation/investigations/workspace?target={{ asset.target }}"
+       class="btn btn-primary btn-sm">
+        ◉ Open Investigation Workspace
+    </a>
+    <span style="font-size:11px;color:var(--text-muted);">
+        Scans · Findings · Evidence · Learning · Skills · Export
+    </span>
+</div>
+
+{% if recon_results %}
+<div class="evidence-label" style="display:flex;align-items:center;gap:10px;">
+    Recon Results — discovered subdomains
+    <button id="scan-discovered-btn-{{ asset.id }}"
+            class="btn btn-primary btn-sm"
+            type="button"
+            onclick='startScanDiscovered("{{ asset.id }}", {{ recon_results|length }})'>
+        <span class="scan-label-idle">Scan all discovered ({{ recon_results|length }})</span>
+        <span class="scan-label-busy"><span class="spinner"></span> Scanning discovered…</span>
+    </button>
+</div>
+<div id="scan-discovered-progress-{{ asset.id }}" class="scan-progress hidden" style="margin-top:6px;">
+    <div class="progress-label">
+        Scanning <span class="current">0</span>/<span class="total">{{ recon_results|length }}</span>:
+        <span class="current-name">—</span>
+    </div>
+    <div class="progress-bar-wrap">
+        <div class="progress-bar-fill" style="width:0%"></div>
+    </div>
+</div>
+<div class="table-wrap" style="margin-top:8px; margin-bottom:14px;">
+    <table class="port-table">
+        <thead>
+            <tr>
+                <th>Hostname</th>
+                <th>IP</th>
+                <th>Source</th>
+                <th>Discovered</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in recon_results %}
+            <tr>
+                <td class="mono">{{ r.hostname }}</td>
+                <td class="mono text-muted">{{ r.ip or "—" }}</td>
+                <td class="mono text-muted" style="font-size:11px;">{{ r.source or "—" }}</td>
+                <td class="mono text-muted" style="font-size:11px;">
+                    {{ r.discovered_at.strftime('%Y-%m-%d %H:%M') }}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+{% if not hosts %}
+<p class="text-muted mono" style="font-size:12px;">
+    No port-scan data yet for <strong>{{ asset.target }}</strong>. Run a scan to discover open ports and services.
+</p>
+{% else %}
+
+<div class="evidence-label">Ports</div>
+{% if ports %}
+<div class="table-wrap" style="margin-bottom:14px;">
+    <table class="port-table">
+        <thead>
+            <tr>
+                <th>Port</th>
+                <th>Protocol</th>
+                <th>Service</th>
+                <th>Findings</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for p in ports %}
+            <tr>
+                <td class="mono">{{ p.service.port }}</td>
+                <td class="mono text-muted">{{ p.service.protocol }}</td>
+                <td class="mono">
+                    {{ p.service.service_name or "—" }}
+                    {% if p.service.product %}
+                        <span class="text-muted">{{ p.service.product }}{% if p.service.version %} {{ p.service.version }}{% endif %}</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% for f in p.findings %}
+                    <span class="finding-inline">
+                        {% if f.status == 'open' and f.validation_status == 'validated_exploitable' %}●{% elif f.status == 'suppressed' %}◌{% else %}○{% endif %}
+                        <span class="qstatus qstatus-{{ f.status }}">
+                            {% if f.validation_status == 'validated_exploitable' %}EXPLOITABLE
+                            {% elif f.status == 'suppressed' %}SUPPRESSED
+                            {% else %}{{ f.status|upper }}{% endif %}
+                        </span>
+                        <span class="mono">{{ f.finding_type }}</span>
+                    </span><br>
+                    {% else %}
+                    <span class="text-muted mono" style="font-size:11px;">—</span>
+                    {% endfor %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<p class="text-muted mono" style="font-size:12px;margin-bottom:14px;">No open ports recorded.</p>
+{% endif %}
+
+<div class="evidence-label">Findings</div>
+{% if findings %}
+<div class="table-wrap">
+    <table>
+        <thead>
+            <tr>
+                <th>Type</th>
+                <th>Result</th>
+                <th>Summary</th>
+                <th>Severity</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for f in findings %}
+            <tr>
+                <td class="mono">{{ f.finding_type }}</td>
+                <td>
+                    <span class="vstatus vstatus-{% if f.validation_status == 'validated_exploitable' %}exploitable{% elif f.validation_status == 'validated_not_exploitable' %}not-exploitable{% else %}matched{% endif %}">
+                        {% if f.validation_status == 'validated_exploitable' %}EXPLOITABLE
+                        {% elif f.validation_status == 'validated_not_exploitable' %}NOT EXPLOITABLE
+                        {% else %}MATCHED{% endif %}
+                    </span>
+                </td>
+                <td class="text-muted" style="font-size:12px;">
+                    {% if f.evidence and f.evidence.context and f.evidence.context.summary %}
+                        {{ f.evidence.context.summary }}
+                    {% elif f.cve %}
+                        {{ f.cve.description[:120] }}{% if f.cve.description|length > 120 %}…{% endif %}
+                    {% elif f.environment_context %}
+                        {{ f.environment_context }}
+                    {% else %}
+                        —
+                    {% endif %}
+                </td>
+                <td>
+                    <span class="severity severity-{{ f.severity }}">{{ f.severity }}</span>
+                </td>
+                <td>
+                    <select class="form-select"
+                            style="padding:4px 8px;font-size:11px;width:auto;display:inline-block;"
+                            name="status"
+                            hx-patch="/api/v1/validation/assets/findings/{{ f.id }}/status"
+                            hx-trigger="change"
+                            hx-swap="none"
+                            hx-include="this">
+                        {% for s in status_choices %}
+                        <option value="{{ s }}" {% if s == f.status %}selected{% endif %}>{{ s }}</option>
+                        {% endfor %}
+                    </select>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<p class="text-muted mono" style="font-size:12px;">No findings recorded for this asset.</p>
+{% endif %}
+
+{% endif %}

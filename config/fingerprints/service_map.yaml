@@ -1,0 +1,111 @@
+# Nmap fingerprint → CVE vendor/product mapping
+# pattern: regex matched against "product version banner" string
+# vendor/product: must match NVD CPE identifiers
+
+mappings:
+  - pattern: "OpenSSH"
+    vendor: "openssh"
+    product: "openssh"
+    version_pattern: "(\\d+\\.\\d+)"
+
+  - pattern: "nginx"
+    vendor: "nginx"
+    product: "nginx"
+    version_pattern: "(\\d+\\.\\d+\\.\\d+)"
+
+  # Apache Tomcat is a distinct product — must be matched before the generic
+  # Apache HTTP Server rule below, otherwise the bare "Apache" prefix would
+  # win and Tomcat findings would be tagged as apache_http_server.
+  - pattern: "Apache\\s+Tomcat"
+    vendor: "apache"
+    product: "tomcat"
+    version_pattern: "(\\d+\\.\\d+\\.\\d+)"
+
+  - pattern: "Apache(?:\\s+httpd)?"
+    vendor: "apache"
+    product: "apache_http_server"
+    version_pattern: "(\\d+\\.\\d+\\.\\d+)"
+
+  - pattern: "Microsoft IIS"
+    vendor: "microsoft"
+    product: "internet_information_services"
+    version_pattern: "(\\d+\\.\\d+)"
+
+  - pattern: "vsftpd"
+    vendor: "vsftpd_project"
+    product: "vsftpd"
+    version_pattern: "(\\d+\\.\\d+\\.\\d+)"
+
+  - pattern: "ProFTPD"
+    vendor: "proftpd"
+    product: "proftpd"
+    version_pattern: "(\\d+\\.\\d+\\.\\d+)"
+
+  - pattern: "OpenSSL"
+    vendor: "openssl"
+    product: "openssl"
+    version_pattern: "(\\d+\\.\\d+\\.\\d+)"
+
+  - pattern: "MySQL"
+    vendor: "mysql"
+    product: "mysql"
+    version_pattern: "(\\d+\\.\\d+\\.\\d+)"
+
+  - pattern: "PostgreSQL"
+    vendor: "postgresql"
+    product: "postgresql"
+    version_pattern: "(\\d+\\.\\d+)"
+
+  - pattern: "Microsoft SQL Server"
+    vendor: "microsoft"
+    product: "sql_server"
+    version_pattern: "(\\d+\\.\\d+)"
+
+  - pattern: "Samba"
+    vendor: "samba"
+    product: "samba"
+    version_pattern: "(\\d+\\.\\d+\\.\\d+)"
+
+  - pattern: "OpenVPN"
+    vendor: "openvpn"
+    product: "openvpn"
+    version_pattern: "(\\d+\\.\\d+\\.\\d+)"
+
+  - pattern: "Dovecot"
+    vendor: "dovecot"
+    product: "dovecot"
+    version_pattern: "(\\d+\\.\\d+\\.\\d+)"
+
+  - pattern: "Postfix"
+    vendor: "postfix"
+    product: "postfix"
+    version_pattern: "(\\d+\\.\\d+\\.\\d+)"
+
+  - pattern: "Exim"
+    vendor: "exim"
+    product: "exim"
+    version_pattern: "(\\d+\\.\\d+)"
+
+  # WordPress core — matched against generator meta strings surfaced by the
+  # wordpress_plugin and against HTTP banners. NVD CPE: wordpress/wordpress.
+  - pattern: "WordPress(?:\\s+|\\?ver=)(\\d+\\.\\d+(?:\\.\\d+)?)"
+    vendor: "wordpress"
+    product: "wordpress"
+    version_pattern: "(\\d+\\.\\d+(?:\\.\\d+)?)"
+
+  - pattern: "wp-content"
+    vendor: "wordpress"
+    product: "wordpress"
+    version_pattern: "(\\d+\\.\\d+(?:\\.\\d+)?)"
+
+  # Drupal core — matched against the X-Generator header / body markers
+  # surfaced by the drupal_plugin and against HTTP banners. NVD CPE: drupal/drupal.
+  - pattern: "Drupal"
+    vendor: "drupal"
+    product: "drupal"
+    version_pattern: "(\\d+\\.\\d+(?:\\.\\d+)?)"
+
+  - pattern: "/sites/default/files"
+    vendor: "drupal"
+    product: "drupal"
+    version_pattern: "(\\d+\\.\\d+(?:\\.\\d+)?)"

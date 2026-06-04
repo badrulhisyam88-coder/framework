@@ -1,0 +1,155 @@
+{#
+  Partial: posture_comparison_panel.html
+  Renders a PostureComparison: before / after side-by-side with deltas.
+  Context: comparison
+#}
+<div class="pc-panel">
+  <div class="pc-header">
+    <span class="pc-title">Posture comparison</span>
+    <span class="pc-meta mono">
+      {{ comparison.before.snapshot_kind }} → {{ comparison.after.snapshot_kind }}
+    </span>
+  </div>
+
+  <div class="pc-side-by-side">
+    <div class="pc-side pc-side--before">
+      <div class="pc-side-label">BEFORE — {{ comparison.before.label }}</div>
+      <div class="pc-side-meta mono">{{ comparison.before.captured_at.strftime('%Y-%m-%d %H:%M') }}</div>
+      <div class="pc-side-stat">{{ comparison.before.findings_count }} finding(s)</div>
+      <div class="pc-side-stat mono">eq {{ comparison.before.evidence_quality_score }}/100</div>
+    </div>
+    <div class="pc-arrow">→</div>
+    <div class="pc-side pc-side--after">
+      <div class="pc-side-label">AFTER — {{ comparison.after.label }}</div>
+      <div class="pc-side-meta mono">{{ comparison.after.captured_at.strftime('%Y-%m-%d %H:%M') }}</div>
+      <div class="pc-side-stat">{{ comparison.after.findings_count }} finding(s)
+        <span class="pc-delta {% if comparison.findings_delta > 0 %}pc-delta--bad{% elif comparison.findings_delta < 0 %}pc-delta--good{% endif %}">
+          {{ '+' if comparison.findings_delta > 0 }}{{ comparison.findings_delta }}
+        </span>
+      </div>
+      <div class="pc-side-stat mono">eq {{ comparison.after.evidence_quality_score }}/100
+        <span class="pc-delta {% if comparison.evidence_quality_delta > 0 %}pc-delta--good{% elif comparison.evidence_quality_delta < 0 %}pc-delta--bad{% endif %}">
+          {{ '+' if comparison.evidence_quality_delta > 0 }}{{ comparison.evidence_quality_delta }}
+        </span>
+      </div>
+    </div>
+  </div>
+
+  {% if comparison.summary %}
+  <ul class="pc-summary">
+    {% for line in comparison.summary %}
+    <li>{{ line }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  {% if comparison.themes_regressed %}
+  <section class="pc-section pc-section--regressed">
+    <h4 class="pc-section-title">⚠ Regressed themes</h4>
+    <ul class="pc-list">
+      {% for t in comparison.themes_regressed %}
+      <li>{{ t.label }} <span class="mono">({{ t.after_finding_count }} finding(s))</span></li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% if comparison.themes_resolved %}
+  <section class="pc-section pc-section--resolved">
+    <h4 class="pc-section-title">✓ Resolved / weakened themes</h4>
+    <ul class="pc-list">
+      {% for t in comparison.themes_resolved %}
+      <li>{{ t.label }} <span class="mono">({{ t.before_finding_count }} → {{ t.after_finding_count }})</span></li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% if comparison.themes_emerging %}
+  <section class="pc-section pc-section--emerging">
+    <h4 class="pc-section-title">◆ Emerging themes</h4>
+    <ul class="pc-list">
+      {% for t in comparison.themes_emerging %}
+      <li>{{ t.label }} <span class="mono">({{ t.after_finding_count }} finding(s))</span></li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% if comparison.themes_unchanged %}
+  <section class="pc-section">
+    <h4 class="pc-section-title">Unchanged themes</h4>
+    <ul class="pc-list">
+      {% for t in comparison.themes_unchanged %}
+      <li>{{ t.label }} <span class="mono">({{ t.after_finding_count }} finding(s))</span></li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% if comparison.new_remediation_themes %}
+  <section class="pc-section pc-section--remediation">
+    <h4 class="pc-section-title">Newly documented remediation</h4>
+    <ul class="pc-list">
+      {% for cid in comparison.new_remediation_themes %}
+      <li class="mono">{{ cid }}</li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% if comparison.why %}
+  <div class="pc-why">
+    {% for line in comparison.why %}<div>why → {{ line }}</div>{% endfor %}
+  </div>
+  {% endif %}
+</div>
+
+<style>
+.pc-panel { display: flex; flex-direction: column; gap: .5rem;
+            padding: .7rem .9rem;
+            background: color-mix(in srgb, var(--accent) 4%, var(--bg-raised));
+            border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border));
+            border-radius: 5px; margin-top: .5rem; }
+.pc-header { display: flex; justify-content: space-between; align-items: baseline;
+             padding-bottom: .3rem; border-bottom: 1px solid var(--border); }
+.pc-title { font-size: .8rem; font-weight: 600; }
+.pc-meta  { font-size: .62rem; color: var(--text-muted); }
+.pc-side-by-side { display: flex; gap: .5rem; align-items: stretch; }
+.pc-side { flex: 1; padding: .4rem .55rem; background: var(--bg-raised);
+            border: 1px solid var(--border); border-radius: 4px;
+            display: flex; flex-direction: column; gap: .15rem; }
+.pc-side--before { border-left: 3px solid var(--medium); }
+.pc-side--after  { border-left: 3px solid var(--low); }
+.pc-side-label   { font-size: .58rem; color: var(--text-muted); font-weight: 600;
+                    text-transform: uppercase; letter-spacing: .04em; }
+.pc-side-meta    { font-size: .56rem; color: var(--text-muted); }
+.pc-side-stat    { font-size: .7rem; }
+.pc-arrow { font-size: 1.5rem; color: var(--accent); align-self: center; }
+.pc-delta {
+  font-size: .58rem; padding: 1px 5px; border-radius: 2px; font-weight: 600;
+  background: color-mix(in srgb, var(--text-muted) 12%, transparent);
+  color: var(--text-muted);
+}
+.pc-delta--good { background: color-mix(in srgb, var(--low) 18%, transparent); color: var(--low); }
+.pc-delta--bad  { background: color-mix(in srgb, var(--critical) 14%, transparent); color: var(--critical); }
+
+.pc-summary { font-size: .7rem; margin: .25rem 0; padding-left: 1.1rem;
+              color: var(--text-secondary); line-height: 1.6; }
+
+.pc-section { padding: .35rem 0; border-top: 1px dashed color-mix(in srgb, var(--border) 60%, transparent); }
+.pc-section-title { font-size: .68rem; font-weight: 600; margin: 0 0 .2rem;
+                    text-transform: uppercase; letter-spacing: .04em; color: var(--text-secondary); }
+.pc-list { list-style: none; margin: 0; padding: 0; font-size: .68rem; }
+.pc-list li { padding: .12rem 0; }
+.pc-section--regressed .pc-section-title { color: var(--critical); }
+.pc-section--resolved  .pc-section-title { color: var(--low); }
+.pc-section--emerging  .pc-section-title { color: var(--medium); }
+.pc-section--remediation .pc-section-title { color: var(--accent); }
+
+.pc-why { margin-top: .3rem; padding: .3rem .5rem;
+          background: color-mix(in srgb, var(--text-muted) 6%, transparent);
+          border-radius: 3px; font-size: .58rem; color: var(--text-muted);
+          font-family: var(--mono); }
+.pc-why div { line-height: 1.6; }
+</style>

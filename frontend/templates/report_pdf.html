@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ title }}</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 2cm;
+            @bottom-right {
+                content: "Page " counter(page) " of " counter(pages);
+                font-size: 9pt;
+                color: #666;
+                font-family: 'Liberation Sans', Arial, sans-serif;
+            }
+            @bottom-left {
+                content: "{{ title }}";
+                font-size: 9pt;
+                color: #666;
+                font-family: 'Liberation Sans', Arial, sans-serif;
+            }
+        }
+
+        body {
+            font-family: 'Liberation Sans', Arial, sans-serif;
+            font-size: 10pt;
+            line-height: 1.45;
+            color: #1a1a1a;
+            margin: 0;
+            padding: 0;
+        }
+
+        h1, h2, h3, h4 {
+            font-family: 'Liberation Sans', Arial, sans-serif;
+            color: #111;
+            margin: 0 0 8px 0;
+        }
+
+        h1 { font-size: 26pt; letter-spacing: 1px; }
+        h2 { font-size: 16pt; }
+        h3 { font-size: 13pt; }
+        h4 { font-size: 11pt; margin-top: 12px; }
+
+        p { margin: 0 0 8px 0; }
+
+        .mono {
+            font-family: 'Liberation Mono', 'Courier New', monospace;
+            font-size: 9pt;
+        }
+
+        .text-muted { color: #666; }
+        .small { font-size: 9pt; }
+
+        .page-break { page-break-before: always; }
+
+        /* Cover page */
+        .cover-page {
+            page-break-after: always;
+            text-align: center;
+            padding-top: 4cm;
+        }
+        .cover-page h1 {
+            font-size: 32pt;
+            font-weight: 700;
+            letter-spacing: 2px;
+            margin-bottom: 0;
+        }
+        .cover-page h2 {
+            font-size: 14pt;
+            font-weight: 400;
+            color: #555;
+            margin-bottom: 3cm;
+        }
+        .cover-page h3 {
+            font-size: 18pt;
+            margin-bottom: 1cm;
+        }
+        .cover-page .cover-meta {
+            margin-top: 2cm;
+            font-size: 11pt;
+            line-height: 2;
+        }
+        .cover-page .cover-meta .label {
+            color: #666;
+            display: inline-block;
+            min-width: 120px;
+            text-align: right;
+            padding-right: 12px;
+        }
+        .cover-page .badge-confidential {
+            margin-top: 4cm;
+            display: inline-block;
+            padding: 8px 20px;
+            border: 2px solid #c00;
+            color: #c00;
+            font-weight: 700;
+            font-size: 10pt;
+            letter-spacing: 1px;
+        }
+
+        /* Section headers */
+        .section-title {
+            border-bottom: 2px solid #333;
+            padding-bottom: 6px;
+            margin: 0 0 16px 0;
+        }
+
+        /* Metrics table */
+        table.metrics {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 12px 0 20px 0;
+        }
+        table.metrics td {
+            padding: 8px 10px;
+            border: 1px solid #ddd;
+            font-size: 10pt;
+        }
+        table.metrics .label {
+            color: #555;
+            width: 60%;
+        }
+        table.metrics .value {
+            text-align: right;
+            font-weight: 700;
+            font-family: 'Liberation Mono', 'Courier New', monospace;
+        }
+
+        /* Generic table */
+        table.kv {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 8px 0 14px 0;
+            font-size: 9.5pt;
+        }
+        table.kv td {
+            padding: 6px 8px;
+            border: 1px solid #ddd;
+            vertical-align: top;
+        }
+        table.kv td.label {
+            background: #f5f5f5;
+            color: #444;
+            width: 28%;
+            font-weight: 600;
+        }
+
+        /* Severity colors */
+        .severity-critical { color: #fff; background: #b91c1c; }
+        .severity-high     { color: #fff; background: #c2410c; }
+        .severity-medium   { color: #1a1a1a; background: #facc15; }
+        .severity-low      { color: #fff; background: #16a34a; }
+        .severity-info     { color: #fff; background: #6b7280; }
+
+        .severity-badge {
+            display: inline-block;
+            padding: 2px 10px;
+            font-size: 9pt;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            border-radius: 2px;
+        }
+
+        .exploitable {
+            color: #b91c1c;
+            font-weight: 700;
+        }
+        .not-exploitable {
+            color: #166534;
+            font-weight: 700;
+        }
+
+        /* Finding box */
+        .finding-box {
+            border: 1px solid #ccc;
+            margin: 0 0 18px 0;
+            page-break-inside: avoid;
+        }
+        .finding-box.page-break {
+            page-break-before: always;
+        }
+        .finding-header {
+            padding: 10px 14px;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .finding-header.severity-critical { background: #b91c1c; }
+        .finding-header.severity-high     { background: #c2410c; }
+        .finding-header.severity-medium   { background: #facc15; color: #1a1a1a; }
+        .finding-header.severity-low      { background: #16a34a; }
+        .finding-header.severity-info     { background: #6b7280; }
+        .finding-header .h-title {
+            font-size: 12pt;
+            font-weight: 700;
+        }
+        .finding-header .h-meta {
+            font-size: 9pt;
+            opacity: 0.9;
+        }
+        .finding-body {
+            padding: 12px 14px;
+        }
+
+        /* 4-step verification */
+        .step-box {
+            border: 1px solid #d4d4d4;
+            margin: 10px 0;
+            page-break-inside: avoid;
+        }
+        .step-box .step-header {
+            background: #1f2937;
+            color: #fff;
+            padding: 6px 10px;
+            font-size: 9.5pt;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+        }
+        .step-box .step-body {
+            padding: 8px 10px;
+            font-size: 9.5pt;
+            color: #222;
+        }
+        .step-box .step-body p {
+            margin: 0 0 6px 0;
+        }
+
+        .evidence-box {
+            background: #f8f8f8;
+            border: 1px solid #e0e0e0;
+            border-radius: 2px;
+            padding: 8px 10px;
+            margin: 6px 0;
+            font-family: 'Liberation Mono', 'Courier New', monospace;
+            font-size: 8.5pt;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            color: #222;
+        }
+        .evidence-label {
+            font-size: 8.5pt;
+            font-weight: 700;
+            color: #555;
+            margin: 4px 0 2px 0;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .recommendation {
+            background: #eef6ff;
+            border-left: 3px solid #2563eb;
+            padding: 8px 10px;
+            margin: 10px 0;
+            font-size: 9.5pt;
+        }
+        .recommendation h4 {
+            margin: 0 0 4px 0;
+            color: #1e3a8a;
+        }
+        .recommendation ol, .recommendation ul {
+            margin: 4px 0 4px 18px;
+            padding: 0;
+        }
+
+        .top-issues {
+            margin-top: 8px;
+        }
+        .top-issues .top-row {
+            padding: 8px 10px;
+            border: 1px solid #ddd;
+            margin: 6px 0;
+            font-size: 9.5pt;
+        }
+
+        .resolved-row {
+            border: 1px solid #d1d5db;
+            padding: 8px 10px;
+            margin: 6px 0;
+            font-size: 9.5pt;
+            background: #f9fafb;
+        }
+
+        .asset-row {
+            font-size: 9.5pt;
+            padding: 4px 0;
+            border-bottom: 1px solid #eee;
+        }
+    </style>
+</head>
+<body>
+
+    {# ==================== COVER PAGE ==================== #}
+    <div class="cover-page">
+        <h1>AI ASSIST TOOL</h1>
+        <h2>Security Validation Report</h2>
+        <h3>{{ title }}</h3>
+        <div class="cover-meta">
+            {% if prepared_by %}
+            <div><span class="label">Prepared by:</span> {{ prepared_by }}</div>
+            {% endif %}
+            {% if period_start or period_end %}
+            <div>
+                <span class="label">Period:</span>
+                {{ period_start or "—" }} to {{ period_end or "—" }}
+            </div>
+            {% endif %}
+            <div>
+                <span class="label">Generated:</span>
+                {{ generated_at.strftime('%Y-%m-%d %H:%M UTC') }}
+            </div>
+        </div>
+        <div class="badge-confidential">CONFIDENTIAL — FOR INTERNAL USE ONLY</div>
+    </div>
+
+    {# ==================== EXECUTIVE SUMMARY ==================== #}
+    {% if 'executive' in sections %}
+    <div class="page-break">
+        <h2 class="section-title">Executive Summary</h2>
+
+        <table class="metrics">
+            <tr>
+                <td class="label">Total Assets In Scope</td>
+                <td class="value">{{ summary.total_assets }}</td>
+            </tr>
+            <tr>
+                <td class="label">Total Findings</td>
+                <td class="value">{{ summary.total_findings }}</td>
+            </tr>
+            <tr>
+                <td class="label">Critical Severity</td>
+                <td class="value">{{ summary.critical_count }}</td>
+            </tr>
+            <tr>
+                <td class="label">High Severity</td>
+                <td class="value">{{ summary.high_count }}</td>
+            </tr>
+            <tr>
+                <td class="label">Medium Severity</td>
+                <td class="value">{{ summary.medium_count }}</td>
+            </tr>
+            <tr>
+                <td class="label">Low Severity</td>
+                <td class="value">{{ summary.low_count }}</td>
+            </tr>
+            <tr>
+                <td class="label">Confirmed Exploitable</td>
+                <td class="value">{{ summary.exploitable_count }}</td>
+            </tr>
+            <tr>
+                <td class="label">Resolved / Acknowledged / Suppressed</td>
+                <td class="value">{{ summary.resolved_count }}</td>
+            </tr>
+        </table>
+
+        {% if top_issues %}
+        <h3>Top Issues</h3>
+        <div class="top-issues">
+            {% for f in top_issues %}
+            <div class="top-row">
+                <span class="severity-badge severity-{{ f.severity }}">{{ f.severity }}</span>
+                <strong>{{ f.finding_type }}</strong>
+                {% if f.cvss_score is not none %}
+                <span class="text-muted">(CVSS {{ '%.1f'|format(f.cvss_score) }})</span>
+                {% endif %}
+                <div class="small text-muted">
+                    {{ f.asset_name or '—' }}
+                    {% if f.host_ip %} · <span class="mono">{{ f.host_ip }}</span>{% endif %}
+                    {% if f.port %}:{{ f.port }}{% endif %}
+                    {% if f.cve_id %} · <span class="mono">{{ f.cve_id }}</span>{% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if assets %}
+        <h3>Assets In Scope</h3>
+        {% for a in assets %}
+        <div class="asset-row">
+            <strong>{{ a.asset.name }}</strong>
+            <span class="mono text-muted">({{ a.asset.target }})</span>
+            <span class="text-muted small">
+                — {{ a.findings|length }} finding(s),
+                {{ a.services|length }} service(s)
+            </span>
+        </div>
+        {% endfor %}
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {# ==================== FINDINGS DETAIL ==================== #}
+    {% if 'findings' in sections and findings %}
+    <div class="page-break">
+        <h2 class="section-title">Findings Detail</h2>
+
+        {% for f in findings %}
+        <div class="finding-box{% if not loop.first %} page-break{% endif %}">
+            <div class="finding-header severity-{{ f.severity }}">
+                <div class="h-title">
+                    <span class="severity-badge severity-{{ f.severity }}"
+                        style="background: rgba(255,255,255,0.18); color: #fff;">{{ f.severity }}</span>
+                    {{ f.finding_type }}
+                    {% if f.cve_id %} — <span class="mono">{{ f.cve_id }}</span>{% endif %}
+                </div>
+                <div class="h-meta">
+                    {% if f.cvss_score is not none %}CVSS {{ '%.1f'|format(f.cvss_score) }} · {% endif %}
+                    {% if f.validation_status == 'validated_exploitable' %}
+                    <span style="color:#fff;">EXPLOITABLE</span>
+                    {% elif f.validation_status == 'validated_not_exploitable' %}
+                    <span style="color:#fff;">NOT EXPLOITABLE</span>
+                    {% else %}
+                    <span style="color:#fff;">MATCHED</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="finding-body">
+                <table class="kv">
+                    <tr>
+                        <td class="label">Asset</td>
+                        <td>{{ f.asset_name or '—' }}</td>
+                    </tr>
+                    <tr>
+                        <td class="label">Host</td>
+                        <td class="mono">{{ f.host_ip or '—' }}{% if f.port %}:{{ f.port }}{% endif %}</td>
+                    </tr>
+                    <tr>
+                        <td class="label">Service</td>
+                        <td class="mono">
+                            {{ f.service_name or '—' }}
+                            {% if f.version %} {{ f.version }}{% endif %}
+                        </td>
+                    </tr>
+                    {% if f.banner %}
+                    <tr>
+                        <td class="label">Banner</td>
+                        <td class="mono">{{ f.banner }}</td>
+                    </tr>
+                    {% endif %}
+                    <tr>
+                        <td class="label">Scan Type</td>
+                        <td>{{ f.scan_type or '—' }}</td>
+                    </tr>
+                    {% if f.plugin_name %}
+                    <tr>
+                        <td class="label">Validation Plugin</td>
+                        <td class="mono">{{ f.plugin_name }}</td>
+                    </tr>
+                    {% endif %}
+                    <tr>
+                        <td class="label">Status</td>
+                        <td>{{ f.status }}{% if f.auto_approved %} <span class="text-muted small">(auto-approved via watchlist)</span>{% endif %}</td>
+                    </tr>
+                    <tr>
+                        <td class="label">Detected</td>
+                        <td>{{ f.timestamp.strftime('%Y-%m-%d %H:%M UTC') if f.timestamp else '—' }}</td>
+                    </tr>
+                </table>
+
+                <h4>How The System Verified This</h4>
+
+                <div class="step-box">
+                    <div class="step-header">1. DISCOVERY</div>
+                    <div class="step-body">
+                        <p>The service was discovered on
+                            <span class="mono">{{ f.host_ip or '—' }}{% if f.port %}:{{ f.port }}{% endif %}</span>
+                            running <span class="mono">{{ f.service_name or 'unknown service' }}{% if f.version %} {{ f.version }}{% endif %}</span>.
+                        </p>
+                        {% if f.banner %}
+                        <div class="evidence-label">Banner observed</div>
+                        <div class="evidence-box">{{ f.banner }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="step-box">
+                    <div class="step-header">2. CORRELATION</div>
+                    <div class="step-body">
+                        {% if f.cve_id %}
+                        <p>The fingerprint matched <span class="mono">{{ f.cve_id }}</span>{% if f.cve and f.cve.cvss_score is not none %} (CVSS {{ '%.1f'|format(f.cve.cvss_score) }}){% endif %}.</p>
+                        {% else %}
+                        <p>The finding was generated from a configuration / hardening check (no CVE lookup needed).</p>
+                        {% endif %}
+                        {% if f.environment_context %}
+                        <div class="evidence-label">Environment Context</div>
+                        <div class="evidence-box">{{ f.environment_context }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="step-box">
+                    <div class="step-header">3. VALIDATION</div>
+                    <div class="step-body">
+                        <p>The validation plugin
+                            <span class="mono">{{ f.plugin_name or '—' }}</span>
+                            executed a non-destructive probe against the target.</p>
+                        <div class="evidence-label">Probe sent</div>
+                        <div class="evidence-box">{% if f.evidence and f.evidence.sent %}{{ f.evidence.sent }}{% else %}N/A{% endif %}</div>
+                        <div class="evidence-label">Response received</div>
+                        <div class="evidence-box">{% if f.evidence and f.evidence.received %}{{ f.evidence.received }}{% else %}N/A{% endif %}</div>
+                    </div>
+                </div>
+
+                <div class="step-box">
+                    <div class="step-header">4. CONCLUSION</div>
+                    <div class="step-body">
+                        {% if f.validation_status == 'validated_exploitable' %}
+                        <p><span class="exploitable">EXPLOITABLE</span> — the probe response confirmed the issue is reachable and exploitable in this environment.</p>
+                        {% elif f.validation_status == 'validated_not_exploitable' %}
+                        <p><span class="not-exploitable">NOT EXPLOITABLE</span> — the probe response indicates the vulnerable code path is not reachable in this environment.</p>
+                        {% else %}
+                        <p>Matched via version fingerprint; live validation has not yet been executed.</p>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {% if f.cve %}
+                <h4>CVE Details</h4>
+                <table class="kv">
+                    <tr>
+                        <td class="label">CVE</td>
+                        <td class="mono">{{ f.cve.cve_id }}</td>
+                    </tr>
+                    {% if f.cve.cvss_score is not none %}
+                    <tr>
+                        <td class="label">CVSS</td>
+                        <td>{{ '%.1f'|format(f.cve.cvss_score) }}{% if f.cve.cvss_vector %} <span class="mono text-muted small">{{ f.cve.cvss_vector }}</span>{% endif %}</td>
+                    </tr>
+                    {% endif %}
+                    <tr>
+                        <td class="label">Description</td>
+                        <td>{{ f.cve.description }}</td>
+                    </tr>
+                    {% if f.cve.published_date %}
+                    <tr>
+                        <td class="label">Published</td>
+                        <td>{{ f.cve.published_date.strftime('%Y-%m-%d') }}</td>
+                    </tr>
+                    {% endif %}
+                </table>
+                {% endif %}
+
+                <div class="recommendation">
+                    {% set ft = f.finding_type %}
+                    {% if ft == 'web_wordpress' %}
+                    <h4>Recommended Action</h4>
+                    <ol>
+                        <li>Upgrade WordPress core and any vulnerable plugins to a patched version.</li>
+                        <li>Remove unused plugins and themes; review installed extensions.</li>
+                        <li>Restrict <span class="mono">/wp-admin</span> access by IP and enforce strong authentication.</li>
+                        <li>Re-run validation after patching to confirm closure.</li>
+                    </ol>
+                    {% elif ft == 'web_header' %}
+                    <h4>Recommended Action</h4>
+                    <ol>
+                        <li>Configure the web server to send the missing / weak security headers (CSP, HSTS, X-Frame-Options, X-Content-Type-Options).</li>
+                        <li>Remove or sanitize headers that leak version information (Server, X-Powered-By).</li>
+                        <li>Re-validate with a header scan after deployment.</li>
+                    </ol>
+                    {% elif ft == 'tls_config' %}
+                    <h4>Recommended Action</h4>
+                    <ol>
+                        <li>Disable deprecated TLS versions (SSLv3, TLS 1.0, TLS 1.1) and weak ciphers.</li>
+                        <li>Enable TLS 1.2+ with modern cipher suites and forward secrecy.</li>
+                        <li>Renew certificates that are expiring or using weak signature algorithms.</li>
+                        <li>Re-run the TLS validation profile after the change.</li>
+                    </ol>
+                    {% elif ft == 'ssh_cred' %}
+                    <h4>Recommended Action</h4>
+                    <ol>
+                        <li>Rotate the compromised credential immediately.</li>
+                        <li>Disable password authentication and enforce key-based access.</li>
+                        <li>Restrict SSH ingress to known management networks.</li>
+                        <li>Audit recent SSH login activity for signs of misuse.</li>
+                    </ol>
+                    {% else %}
+                    <h4>Recommended Action</h4>
+                    <ul>
+                        <li>Apply the vendor-published fix for this finding type.</li>
+                        <li>Restrict exposure of the affected service to trusted networks.</li>
+                        <li>Re-run the matching validation profile to confirm remediation.</li>
+                    </ul>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {# ==================== RESOLVED FINDINGS ==================== #}
+    {% if 'resolved' in sections and resolved_findings %}
+    <div class="page-break">
+        <h2 class="section-title">Resolved / Acknowledged Findings</h2>
+        {% for f in resolved_findings %}
+        <div class="resolved-row">
+            <span class="severity-badge severity-{{ f.severity }}">{{ f.severity }}</span>
+            <strong>{{ f.finding_type }}</strong>
+            {% if f.cve_id %} · <span class="mono">{{ f.cve_id }}</span>{% endif %}
+            <span class="text-muted small"> · status: {{ f.status }}</span>
+            <div class="small text-muted">
+                {{ f.asset_name or '—' }}
+                {% if f.host_ip %} · <span class="mono">{{ f.host_ip }}</span>{% endif %}
+                {% if f.port %}:{{ f.port }}{% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {# ==================== SCAN METADATA ==================== #}
+    {% if 'metadata' in sections %}
+    <div class="page-break">
+        <h2 class="section-title">Scan Metadata</h2>
+        <table class="kv">
+            <tr>
+                <td class="label">Report Title</td>
+                <td>{{ title }}</td>
+            </tr>
+            {% if prepared_by %}
+            <tr>
+                <td class="label">Prepared By</td>
+                <td>{{ prepared_by }}</td>
+            </tr>
+            {% endif %}
+            <tr>
+                <td class="label">Generated At</td>
+                <td>{{ generated_at.strftime('%Y-%m-%d %H:%M UTC') }}</td>
+            </tr>
+            {% if period_start or period_end %}
+            <tr>
+                <td class="label">Period</td>
+                <td>{{ period_start or '—' }} to {{ period_end or '—' }}</td>
+            </tr>
+            {% endif %}
+            <tr>
+                <td class="label">Assets In Scope</td>
+                <td>{{ summary.total_assets }}</td>
+            </tr>
+            <tr>
+                <td class="label">Total Findings</td>
+                <td>{{ summary.total_findings }}</td>
+            </tr>
+            <tr>
+                <td class="label">CVE Knowledge Base</td>
+                <td>{{ cve_count }} entries</td>
+            </tr>
+            <tr>
+                <td class="label">Last CVE Sync</td>
+                <td>{{ last_sync or 'never' }}</td>
+            </tr>
+            <tr>
+                <td class="label">Sections Included</td>
+                <td>{{ sections | join(', ') }}</td>
+            </tr>
+        </table>
+
+        <p class="small text-muted" style="margin-top: 20px;">
+            This report was generated by the AI Assist Tool validation engine.
+            All findings were verified through non-destructive probes against
+            the listed targets. Evidence shown reflects the exact payloads and
+            responses captured at the time of validation.
+        </p>
+    </div>
+    {% endif %}
+
+</body>
+</html>

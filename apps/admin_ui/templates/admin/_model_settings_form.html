@@ -1,0 +1,44 @@
+<form
+  hx-post="/admin/settings/models"
+  hx-target="#model-settings-container"
+  hx-swap="innerHTML"
+  style="margin-top:1rem;">
+  <table>
+    <thead>
+      <tr>
+        <th>Setting</th>
+        <th>Value</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>LLM Model</strong></td>
+        <td>
+          <select name="llm_model">
+            {% for m in llm_models %}
+            <option value="{{ m }}" {% if m == current_llm %}selected{% endif %}>{{ m }}</option>
+            {% endfor %}
+          </select>
+        </td>
+      </tr>
+      <tr>
+        <td><strong>Embedding Model</strong></td>
+        <td>
+          <select name="embed_model">
+            {% for m in embed_models %}
+            <option value="{{ m }}" {% if m == current_embed %}selected{% endif %}>{{ m }}</option>
+            {% endfor %}
+          </select>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+  <button type="submit" style="margin-top:0.5rem;">Save</button>
+  {% if save_ok is defined %}
+  <span style="color:green;margin-left:1rem;">Saved.</span>
+  {% endif %}
+  {% if save_error is defined %}
+  <span style="color:red;margin-left:1rem;">{{ save_error }}</span>
+  {% endif %}
+  <p class="last-updated">Last updated: {{ now_iso }}</p>
+</form>

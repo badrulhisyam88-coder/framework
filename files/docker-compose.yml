@@ -1,0 +1,41 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: deployment/docker/Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      # Hot reload for development
+      - ./core:/app/core
+      - ./sdk:/app/sdk
+      - ./apps:/app/apps
+      - ./frontend:/app/frontend
+      - ./config:/app/config
+      # Persistent SQLite data
+      - ./data:/app/data
+    environment:
+      - AI_FACTORY_APP_NAME=AI Assist Tool
+      - AI_FACTORY_ENVIRONMENT=development
+      - AI_FACTORY_DEBUG=true
+      - AI_FACTORY_LOG_LEVEL=INFO
+      - AI_FACTORY_API_PREFIX=/api/v1
+      - AI_FACTORY_VERSION=0.1.0
+      # Tool-specific
+      - TOOL_DB_PATH=/app/data/validation.db
+      - TOOL_NVD_API_KEY=${NVD_API_KEY:-}
+      - TOOL_SCAN_TIMEOUT=300
+      - TOOL_MAX_TARGETS=254
+    # Required for Nmap SYN scans
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+    # Development: hot reload
+    command: uvicorn core.main:app --host 0.0.0.0 --port 8000 --reload
+    restart: "no"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s

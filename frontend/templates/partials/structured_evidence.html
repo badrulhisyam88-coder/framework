@@ -1,0 +1,237 @@
+{# Phase 54 — Generic structured evidence renderer.
+
+   Context provided by _structured_evidence_panel():
+     label, kind, status                   (header)
+     analysis: dict                        (confirmed, severity, exploitability_notes, references)
+     request_obj: dict | None              (method, url, headers, body)
+     sent: dict | None                     (payload_string, encoding, injection_point)
+     response_obj: dict | None             (status, headers, body_excerpt, full_body_ref)
+     observed: dict | None                 (reflected_at, sanitization, execution_context, indicators)
+     next_actions: list[{id, action_kind, label, reason, source}]
+     finding_id, exploit_path_id, action_kind  (for Execute POST URL)
+
+   Sections render in order; absent data → section skipped.
+   Source badge on next_actions: "catalog" or "probe".
+#}
+
+<div class="space-y-3 text-[#1f2328] text-xs">
+
+  {# ── 1. Header ───────────────────────────────────────────────── #}
+  <div>
+    <div class="text-zinc-500 uppercase text-[10px] tracking-wide mb-0.5">structured evidence</div>
+    <div class="text-sm font-semibold text-[#1f2328]">{{ label }}</div>
+    <div class="flex items-center gap-2 mt-1">
+      {% if kind == 'blocked' %}
+        <span class="text-[#1a7f37] text-[11px]">✓ blocked</span>
+      {% elif kind == 'persists' %}
+        <span class="text-red-600 text-[11px]">! persists</span>
+      {% elif kind == 'detected' %}
+        <span class="text-[#0969da] text-[11px]">◆ detected</span>
+      {% elif kind == 'note' %}
+        <span class="text-[#656d76] text-[11px]">· note</span>
+      {% endif %}
+      {% if analysis.confirmed %}
+        <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">confirmed</span>
+      {% elif analysis %}
+        <span class="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">unconfirmed</span>
+      {% endif %}
+      {% if analysis.severity %}
+        <span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">{{ analysis.severity }}</span>
+      {% endif %}
+    </div>
+  </div>
+
+  {# ── 2. Analysis — exploitability narrative ────────────────── #}
+  {% if analysis.exploitability_notes %}
+  <div>
+    <div class="text-zinc-500 uppercase text-[10px] tracking-wide mb-0.5">Analysis</div>
+    <div class="text-[#1f2328] leading-relaxed">{{ analysis.exploitability_notes }}</div>
+  </div>
+  {% endif %}
+
+  {# ── 3. Request ─────────────────────────────────────────────── #}
+  {% if request_obj %}
+  <div>
+    <div class="text-zinc-500 uppercase text-[10px] tracking-wide mb-0.5">Request</div>
+    <div class="font-mono text-[11px] text-zinc-300 bg-[#0d1117] border border-zinc-800 rounded p-2">
+      <span class="text-blue-300">{{ request_obj.method or 'GET' }}</span>
+      <span class="text-zinc-200">{{ request_obj.url }}</span>
+    </div>
+    {% if request_obj.headers %}
+      <details class="mt-1">
+        <summary class="cursor-pointer text-[10px] text-zinc-500">Headers ({{ request_obj.headers|length }})</summary>
+        <div class="font-mono text-[10px] text-zinc-400 mt-1 bg-[#0d1117] border border-zinc-800 rounded p-2 space-y-0.5">
+          {% for k, v in request_obj.headers.items() %}
+            <div><span class="text-zinc-500">{{ k }}:</span> {{ v }}</div>
+          {% endfor %}
+        </div>
+      </details>
+    {% endif %}
+    {% if request_obj.body %}
+      <details class="mt-1">
+        <summary class="cursor-pointer text-[10px] text-zinc-500">Body</summary>
+        <pre class="font-mono text-[10px] text-zinc-400 mt-1 bg-[#0d1117] border border-zinc-800 rounded p-2 overflow-x-auto">{{ request_obj.body }}</pre>
+      </details>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {# ── 4. Sent payload ────────────────────────────────────────── #}
+  {% if sent %}
+  <div>
+    <div class="text-zinc-500 uppercase text-[10px] tracking-wide mb-0.5">Sent payload</div>
+    <pre class="font-mono text-[11px] text-amber-200 bg-[#0d1117] border border-amber-900/50 rounded p-2 overflow-x-auto">{{ sent.payload_string }}</pre>
+    {% if sent.injection_point or sent.encoding %}
+      <div class="text-[10px] text-zinc-500 mt-1 flex gap-3">
+        {% if sent.injection_point %}<span>injection: <code class="text-[#1f2328]">{{ sent.injection_point }}</code></span>{% endif %}
+        {% if sent.encoding %}<span>encoding: <code class="text-[#1f2328]">{{ sent.encoding }}</code></span>{% endif %}
+      </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {# ── 5. Response ────────────────────────────────────────────── #}
+  {% if response_obj %}
+  <div>
+    <div class="text-zinc-500 uppercase text-[10px] tracking-wide mb-0.5">Response</div>
+    <div class="font-mono text-[11px] text-zinc-300 bg-[#0d1117] border border-zinc-800 rounded p-2">
+      HTTP <span class="text-emerald-300">{{ response_obj.status }}</span>
+    </div>
+    {% if response_obj.headers %}
+      <details class="mt-1">
+        <summary class="cursor-pointer text-[10px] text-zinc-500">Headers ({{ response_obj.headers|length }})</summary>
+        <div class="font-mono text-[10px] text-zinc-400 mt-1 bg-[#0d1117] border border-zinc-800 rounded p-2 space-y-0.5">
+          {% for k, v in response_obj.headers.items() %}
+            <div><span class="text-zinc-500">{{ k }}:</span> {{ v }}</div>
+          {% endfor %}
+        </div>
+      </details>
+    {% endif %}
+    {% if response_obj.body_excerpt %}
+      <details class="mt-1">
+        <summary class="cursor-pointer text-[10px] text-zinc-500">Body excerpt</summary>
+        <pre class="font-mono text-[10px] text-zinc-300 mt-1 bg-[#0d1117] border border-zinc-800 rounded p-2 overflow-x-auto">{{ response_obj.body_excerpt }}</pre>
+      </details>
+    {% endif %}
+    {% if response_obj.full_body_ref %}
+      <div class="text-[10px] text-zinc-500 mt-1">full body: <code class="text-[#1f2328]">{{ response_obj.full_body_ref }}</code></div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {# ── 6. Observed indicators ────────────────────────────────── #}
+  {% if observed %}
+  <div>
+    <div class="text-zinc-500 uppercase text-[10px] tracking-wide mb-0.5">Observed</div>
+    <table class="text-[11px] w-full">
+      {% for k, v in observed.items() %}
+        {% if v is not none and v != "" %}
+          <tr>
+            <td class="text-zinc-500 pr-2 align-top whitespace-nowrap">{{ k }}</td>
+            <td class="text-[#1f2328] font-mono">{{ v }}</td>
+          </tr>
+        {% endif %}
+      {% endfor %}
+    </table>
+  </div>
+  {% endif %}
+
+  {# ── 7. References ─────────────────────────────────────────── #}
+  {# Phase 56 — references are now {label, url} dicts; legacy strings
+     still render as plain text for back-compat with unmigrated probes. #}
+  {% if analysis.references %}
+  <div>
+    <div class="text-zinc-500 uppercase text-[10px] tracking-wide mb-0.5">References</div>
+    <ul class="text-[11px] text-[#656d76] list-disc list-inside space-y-0.5">
+      {% for r in analysis.references %}
+        <li>
+          {% if r is mapping and r.url %}
+            <a href="{{ r.url }}" target="_blank" rel="noopener noreferrer"
+               class="text-[#0969da] hover:text-blue-700 underline decoration-[#d0d7de] hover:decoration-blue-400">
+              {{ r.label or r.url }}
+            </a>
+          {% else %}
+            {{ r }}
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {# ── 8. Next actions — clickable, same endpoint as ghost click ── #}
+  {% if next_actions %}
+  <div class="pt-1">
+    <div class="text-zinc-500 uppercase text-[10px] tracking-wide mb-1">Suggested next actions</div>
+    <div class="space-y-1.5">
+      {% for na in next_actions %}
+        {# Build the execute URL once, reused in both button and form variants. #}
+        {% set _exec_url = "/api/v1/validation/workspace/investigations/" ~ investigation_id ~ "/finding/" ~ finding_id ~ "/suggest/" ~ na.action_kind ~ "/execute?" %}
+        {% if exploit_path_id %}{% set _exec_url = _exec_url ~ "exploit_path_id=" ~ exploit_path_id ~ "&" %}{% endif %}
+        {% if parent_run_id %}{% set _exec_url = _exec_url ~ "parent_run_id=" ~ parent_run_id %}{% endif %}
+        <div class="rounded-md border border-[#d0d7de] hover:border-[#1f2328] transition-colors p-2">
+          <div class="flex items-start justify-between gap-2">
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-1.5">
+                <span class="text-[#1f2328] text-[12px] font-medium truncate">{{ na.label }}</span>
+                {% if na.source == 'probe' %}
+                  <span class="text-[9px] px-1 py-0.5 rounded bg-blue-100 text-blue-700">from probe</span>
+                {% else %}
+                  <span class="text-[9px] px-1 py-0.5 rounded bg-zinc-800 text-zinc-400">catalog</span>
+                {% endif %}
+              </div>
+              <div class="text-zinc-500 text-[10px] mt-0.5">{{ na.reason }}</div>
+            </div>
+            {# Phase 54b — append exploit_path_id query so the run is
+               attributed to the operator-chosen path, not a guess.
+               Phase 57 — class + data attributes present for backend dedup;
+               V1.4a removed the JS click interceptor (was in investigation-flow.js).
+               Backend asyncio.Lock dedup catches duplicate POSTs.
+               Item 2/5 — na.inputs is a list of {name, location, placeholder} dicts.
+               When non-empty, the card renders one text input per field.
+               When empty, a plain Execute button is rendered. #}
+            {% if na.executed %}
+            <span class="shrink-0 text-[11px] text-zinc-500 font-mono">✓ executed</span>
+            {% elif na.inputs %}
+            {# Input card: operator fills each field before clicking Execute #}
+            <form
+              hx-post="{{ _exec_url }}"
+              hx-swap="none"
+              hx-on::after-request="window.dispatchEvent(new CustomEvent('inv-topology-refresh'));"
+              class="shrink-0 flex items-center gap-1 flex-wrap">
+              {% for inp in na.inputs %}
+              <input
+                type="text"
+                name="{{ inp.name }}"
+                placeholder="{{ inp.placeholder or inp.name }}"
+                value="{{ inp.default or '' }}"
+                class="rounded border border-[#d0d7de] bg-white px-1.5 py-0.5 text-[11px] text-[#1f2328] w-36 focus:outline-none focus:border-blue-400"
+                required>
+              {% endfor %}
+              <button
+                type="submit"
+                class="inv-panel-execute-btn rounded bg-blue-600 hover:bg-blue-500 px-2 py-0.5 text-[11px] text-white font-medium">
+                Execute →
+              </button>
+            </form>
+            {% else %}
+            <button
+              type="button"
+              class="inv-panel-execute-btn shrink-0 rounded bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-wait px-2 py-0.5 text-[11px] text-white font-medium"
+              data-finding-id="{{ finding_id }}"
+              data-action-kind="{{ na.action_kind }}"
+              data-exploit-path-id="{{ exploit_path_id }}"
+              hx-post="{{ _exec_url }}"
+              hx-swap="none"
+              hx-on::after-request="window.dispatchEvent(new CustomEvent('inv-topology-refresh'));">
+              Execute →
+            </button>
+            {% endif %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+</div>

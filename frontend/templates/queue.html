@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+{% block title %}Validation Queue — AI Assist Tool{% endblock %}
+{% block heading %}Validation Queue{% endblock %}
+
+{% block actions %}
+<button id="group-toggle-btn" class="btn btn-secondary" type="button" onclick="toggleGroupView()">
+    Group by Host
+</button>
+<button class="btn btn-secondary"
+    hx-post="/api/v1/validation/queue/purge-test-items"
+    hx-confirm="Purge ALL queue items targeting loopback/test hosts (127.0.0.1, localhost, ::1)?"
+    hx-swap="none">
+    Purge Test Items
+</button>
+<button class="btn btn-secondary"
+    hx-post="/api/v1/validation/queue/archive-completed"
+    hx-confirm="Archive completed items past their retention window and purge repeat-rejected triples?"
+    hx-swap="none">
+    Archive Completed
+</button>
+<button class="btn btn-reject"
+    hx-post="/api/v1/validation/queue/reject-all-pending"
+    hx-confirm="Reject ALL {{ counts.get('pending', 0) }} pending queue item(s)?"
+    hx-swap="none"
+    {% if counts.get('pending', 0) == 0 %}disabled{% endif %}>
+    ✕ Reject All Pending ({{ counts.get('pending', 0) }})
+</button>
+{% endblock %}
+
+{% block content %}
+<style>
+    .tab-row {
+        display: flex;
+        gap: 4px;
+        margin: 0 0 16px 0;
+        border-bottom: 1px solid var(--border, #2a2a2a);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 13px;
+    }
+    .tab-row .tab {
+        padding: 8px 14px;
+        color: var(--text-muted, #9aa0a6);
+        text-decoration: none;
+        border-bottom: 2px solid transparent;
+        margin-bottom: -1px;
+    }
+    .tab-row .tab:hover { color: var(--text, #e6e6e6); }
+    .tab-row .tab.active {
+        color: var(--accent, #4f8cff);
+        border-bottom-color: var(--accent, #4f8cff);
+        font-weight: 600;
+    }
+    .tab-row .tab .count {
+        color: var(--text-muted, #9aa0a6);
+        margin-left: 4px;
+    }
+    .tab-row .tab.active .count { color: var(--accent, #4f8cff); }
+</style>
+
+{# ── Investigation workspace entry ──────────────────────────────── #}
+<div style="margin-bottom:10px;padding:7px 11px;background:color-mix(in srgb, var(--accent) 5%, var(--bg-raised));border:1px solid color-mix(in srgb, var(--accent) 25%, var(--border));border-radius:var(--radius);display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;color:var(--text-secondary);">
+    <span>◆ Global queue view. For per-target approval within investigation context, use the Workspace Validation tab.</span>
+    <a href="/api/v1/validation/investigations" class="btn btn-primary btn-sm" style="flex-shrink:0;">Open Workspace →</a>
+</div>
+
+<nav class="tab-row" aria-label="Queue status filter">
+    {% set tabs = [
+        ("pending", "Pending"),
+        ("approved", "Approved"),
+        ("completed", "Completed"),
+        ("rejected", "Rejected"),
+        ("expired", "Expired"),
+        ("all", "All"),
+    ] %}
+    {% for slug, label in tabs %}
+    <a class="tab {% if selected_status == slug %}active{% endif %}"
+       href="/api/v1/validation/queue?status={{ slug }}{% if selected_host %}&host={{ selected_host }}{% endif %}">
+        {{ label }}<span class="count">({{ tab_counts.get(slug, 0) }})</span>
+    </a>
+    {% endfor %}
+</nav>
+
+<div class="stats-row">
+    <div class="stat-card"><div class="stat-value">{{ counts.get('pending', 0) }}</div><div class="stat-label">Pending</div></div>
+    <div class="stat-card"><div class="stat-value">{{ counts.get('approved', 0) }}</div><div class="stat-label">Approved</div></div>
+    <div class="stat-card"><div class="stat-value">{{ counts.get('completed', 0) }}</div><div class="stat-label">Completed</div></div>
+    <div class="stat-card"><div class="stat-value">{{ counts.get('rejected', 0) }}</div><div class="stat-label">Rejected</div></div>
+</div>
+
+{% if selected_host %}
+<div class="card" style="border-color: var(--accent);">
+    <div class="card-title">
+        Filtered to host
+        <span class="mono">{{ groups[0].host.ip if groups and groups[0].host else selected_host[:8] }}</span>
+        <a href="/api/v1/validation/queue{% if selected_status and selected_status != 'all' %}?status={{ selected_status }}{% endif %}"
+           class="btn btn-secondary btn-sm" style="margin-left:12px;">Clear host filter</a>
+    </div>
+</div>
+{% endif %}
+
+<div class="card" id="queue-flat-view">
+    <div class="card-title">
+        Queue Items
+        {% if selected_status and selected_status != 'all' %}
+        <small class="text-muted" style="margin-left:8px;">— {{ selected_status }}</small>
+        {% endif %}
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Asset Name</th>
+                    <th>Target</th>
+                    <th>Port</th>
+                    <th>Service</th>
+                    <th>CVE</th>
+                    <th>Validation</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="queue-table-body">
+                {% for item in items %}
+                {% include "partials/queue_row.html" %}
+                {% else %}
+                <tr><td colspan="9" class="empty-state">No queue items match this filter.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card" id="queue-grouped-view" style="display:none;">
+    <div class="card-title">Queue Items — Grouped by Host</div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th style="width:24px;"></th>
+                    <th>Host</th>
+                    <th colspan="6">Pending / Approved</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for g in groups %}
+                <tr class="host-group-header expandable-row" onclick="toggleHostGroup('{{ g.host_id }}', this)">
+                    <td><span class="expand-icon" id="grp-icon-{{ g.host_id }}">▶</span></td>
+                    <td class="mono">{{ g.host.ip if g.host else g.host_id[:8] }}</td>
+                    <td colspan="6">
+                        <span class="host-group-counts">
+                            <span class="count-pill">{{ g["items"]|length }} total</span>
+                            <span class="count-pill">{{ g.pending }} pending</span>
+                            <span class="count-pill">{{ g.approved }} approved</span>
+                        </span>
+                    </td>
+                </tr>
+                <tr class="sub-row" id="grp-rows-{{ g.host_id }}" style="display:none;">
+                    <td colspan="8">
+                        <div class="sub-table">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Port</th>
+                                        <th>Service</th>
+                                        <th>CVE</th>
+                                        <th>Validation</th>
+                                        <th>Status</th>
+                                        <th>Created</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item in g["items"] %}
+                                    <tr id="grp-row-{{ item.id }}">
+                                        <td class="mono">{{ item.service.port if item.service else "—" }}</td>
+                                        <td class="text-muted">{{ item.service.service_name if item.service else "—" }}
+                                            {% if item.service and item.service.version %}
+                                            <small class="text-muted">{{ item.service.version }}</small>{% endif %}
+                                        </td>
+                                        <td>{% if item.cve %}<a href="{{ item.cve.source_url }}" target="_blank" class="mono" style="color:var(--accent);font-size:12px;">{{ item.cve_id }}</a>{% else %}—{% endif %}</td>
+                                        <td class="mono" style="font-size:12px;">{{ item.validation_type }}</td>
+                                        <td><span class="qstatus qstatus-{{ item.status }}">{{ item.status }}</span></td>
+                                        <td class="text-muted mono" style="font-size:11px;">{{ item.created_at.strftime('%m-%d %H:%M') }}</td>
+                                        <td>
+                                            {% if item.status == 'pending' %}
+                                            <button class="btn btn-approve btn-sm"
+                                                hx-patch="/api/v1/validation/queue/{{ item.id }}/approve"
+                                                hx-vals='{"notes": ""}'
+                                                hx-swap="none">✓ Approve</button>
+                                            <button class="btn btn-reject btn-sm"
+                                                hx-patch="/api/v1/validation/queue/{{ item.id }}/reject"
+                                                hx-vals='{"notes": ""}'
+                                                hx-swap="none">✕ Reject</button>
+                                            {% else %}—{% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="8" class="empty-state">Queue is empty.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+function toggleGroupView() {
+    var flat = document.getElementById("queue-flat-view");
+    var grp = document.getElementById("queue-grouped-view");
+    var btn = document.getElementById("group-toggle-btn");
+    var flatHidden = flat.style.display === "none";
+    if (flatHidden) {
+        flat.style.display = ""; grp.style.display = "none";
+        btn.textContent = "Group by Host";
+    } else {
+        flat.style.display = "none"; grp.style.display = "";
+        btn.textContent = "Ungroup (Flat List)";
+    }
+}
+
+function toggleHostGroup(hostId, headerEl) {
+    var sub = document.getElementById("grp-rows-" + hostId);
+    var icon = document.getElementById("grp-icon-" + hostId);
+    if (!sub) return;
+    var hidden = sub.style.display === "none";
+    sub.style.display = hidden ? "table-row" : "none";
+    if (icon) { icon.classList.toggle("open", hidden); }
+}
+
+// If a host filter is set, switch to grouped view automatically.
+(function () {
+    var url = new URL(window.location.href);
+    if (url.searchParams.get("host")) {
+        toggleGroupView();
+        // Open the (only) host group by default
+        var hdr = document.querySelector(".host-group-header");
+        if (hdr) { hdr.click(); }
+    }
+})();
+</script>
+{% endblock %}

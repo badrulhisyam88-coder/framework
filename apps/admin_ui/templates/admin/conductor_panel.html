@@ -1,0 +1,9 @@
+{% extends "admin/base.html" %}
+{% block content %}
+<h1>Conductor</h1>
+<div hx-get="/admin/conductor/refresh"
+     hx-trigger="every 2s"
+     hx-swap="innerHTML">
+  {% include "admin/_conductor_table.html" %}
+</div>
+{% endblock %}

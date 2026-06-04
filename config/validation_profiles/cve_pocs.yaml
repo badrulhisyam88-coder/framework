@@ -1,0 +1,29 @@
+# CVE PoC catalogue.
+#
+# Reference data — maps CVE IDs to the plugin that knows how to probe them
+# and a short description for the UI. The validation plugins themselves
+# remain authoritative for actual probe payloads; this file just keeps
+# severity / description / plugin mapping near the rest of the config.
+
+cves:
+  CVE-2018-7600:
+    description: Drupalgeddon2 RCE — unauthenticated remote code execution via the user/register AJAX form
+    severity: critical
+    affected: drupal
+    plugin: drupal_plugin
+    check: drupalgeddon2
+
+  CVE-2014-3704:
+    description: Drupageddon SQLi — pre-auth SQL injection in Drupal 7 prior to 7.32
+    severity: critical
+    affected: drupal
+    plugin: drupal_plugin
+    check: sqli_legacy
+    version_constraint: "<7.32"
+
+  CVE-2019-6340:
+    description: Drupal REST RCE — unauthenticated RCE via REST endpoints when the RESTful Web Services module is enabled
+    severity: critical
+    affected: drupal
+    plugin: drupal_plugin
+    check: api_exposure

@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+{% block title %}Settings — AI Assist Tool{% endblock %}
+{% block heading %}Settings{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-title">CVE Database</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;">
+        <div><div class="evidence-label">Total CVEs</div><div class="mono" style="font-size:22px;font-weight:700;">{{ total_cves }}</div></div>
+        <div><div class="evidence-label">Last Sync</div><div class="mono">{{ last_sync }}</div></div>
+        <div><div class="evidence-label">NVD API Key</div><div class="mono">{{ "Configured" if has_api_key else "Not set (rate limited)" }}</div></div>
+    </div>
+    <div style="display:flex;gap:10px;">
+        <button class="btn btn-primary"
+            hx-post="/api/v1/validation/settings/nvd-sync?full=false"
+            hx-indicator="#sync-spinner"
+            hx-swap="none">
+            <span class="htmx-indicator" id="sync-spinner"><span class="spinner"></span></span>
+            Sync Recent (7 days)
+        </button>
+        <button class="btn btn-secondary"
+            hx-post="/api/v1/validation/settings/nvd-sync?full=true"
+            hx-confirm="Full sync pulls all CVEs and takes a long time. Continue?"
+            hx-swap="none">
+            Full Sync (first run)
+        </button>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-title">Scan Concurrency</div>
+    <p class="text-muted" style="margin-bottom:12px;font-size:12px;">
+        Global worker count. Used as the default for nmap parallelism,
+        validation queue execution, and credential testing. Overridable
+        per-scan from the Discovery page.
+    </p>
+    <form hx-post="/api/v1/validation/settings/workers"
+          hx-target="#workers-saved"
+          hx-swap="innerHTML"
+          style="display:flex;gap:10px;align-items:end;">
+        <div class="form-group" style="max-width:160px;margin-bottom:0;">
+            <label class="form-label">Default Workers</label>
+            <input class="form-input" type="number" name="workers"
+                min="{{ workers_min }}" max="{{ workers_max }}" step="1"
+                value="{{ default_workers }}">
+        </div>
+        <button class="btn btn-primary" type="submit">Save</button>
+        <div id="workers-saved" class="mono" style="font-size:12px;"></div>
+    </form>
+</div>
+
+<div class="card">
+    <div class="card-title">Queue Retention</div>
+    <p class="text-muted" style="margin-bottom:12px;font-size:12px;">
+        Findings and history are <strong>permanent</strong>. Only queue items are
+        managed. The hourly lifecycle worker archives expired items to the
+        history audit log; items rejected 3+ times for the same host+service+type
+        are purged immediately.
+    </p>
+    <form hx-post="/api/v1/validation/settings/retention"
+          hx-target="#retention-saved"
+          hx-swap="innerHTML"
+          style="display:grid;grid-template-columns:repeat(4,minmax(160px,1fr));gap:12px;align-items:end;">
+        <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label">Exploitable retention (days)</label>
+            <input class="form-input" type="number" name="retain_exploitable"
+                min="0" step="1" value="{{ retain_exploitable }}">
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label">Not-exploitable retention (days)</label>
+            <input class="form-input" type="number" name="retain_not_exploitable"
+                min="0" step="1" value="{{ retain_not_exploitable }}">
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label">Rejected retention (days)</label>
+            <input class="form-input" type="number" name="retain_rejected"
+                min="0" step="1" value="{{ retain_rejected }}">
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label">Auto-archive</label>
+            <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;">
+                <input type="checkbox" name="auto_archive" value="on"
+                    {% if auto_archive %}checked{% endif %}>
+                Run hourly
+            </label>
+        </div>
+        <div style="grid-column:1 / -1;display:flex;gap:10px;align-items:center;">
+            <button class="btn btn-primary" type="submit">Save Retention</button>
+            <div id="retention-saved" class="mono" style="font-size:12px;"></div>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <div class="card-title">Queue Health</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;">
+        <div>
+            <div class="evidence-label">Total Queue Items</div>
+            <div class="mono" style="font-size:22px;font-weight:700;">
+                {{ (queue_stats.by_status.values()|sum) if queue_stats.by_status else 0 }}
+            </div>
+        </div>
+        <div>
+            <div class="evidence-label">Oldest Item</div>
+            <div class="mono" style="font-size:13px;">
+                {{ queue_stats.oldest_created_at or "—" }}
+            </div>
+        </div>
+        <div>
+            <div class="evidence-label">To Archive Next Run</div>
+            <div class="mono" style="font-size:22px;font-weight:700;">
+                {{ queue_stats.archivable_estimate }}
+            </div>
+        </div>
+        <div>
+            <div class="evidence-label">To Purge Next Run</div>
+            <div class="mono" style="font-size:22px;font-weight:700;">
+                {{ queue_stats.purgable_estimate }}
+            </div>
+        </div>
+    </div>
+    {% if queue_stats.by_status %}
+    <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;">
+        {% for status, n in queue_stats.by_status.items() %}
+        <span class="qstatus qstatus-{{ status }}">{{ status }}: {{ n }}</span>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+
+<div class="card">
+    <div class="card-title">Suppression Statistics</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:12px;">
+        <div>
+            <div class="evidence-label">Known-issue rules</div>
+            <div class="mono" style="font-size:22px;font-weight:700;">
+                {{ suppression_stats.total_rules }}
+            </div>
+        </div>
+        <div>
+            <div class="evidence-label">Suppressed today</div>
+            <div class="mono" style="font-size:22px;font-weight:700;">
+                {{ suppression_stats.today_hits }}
+            </div>
+        </div>
+        <div>
+            <div class="evidence-label">Suppressed all time</div>
+            <div class="mono" style="font-size:22px;font-weight:700;">
+                {{ suppression_stats.all_time_hits }}
+            </div>
+        </div>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;">
+        <button class="btn btn-primary"
+            hx-post="/api/v1/validation/settings/rescan-suppressions"
+            hx-target="#rescan-result"
+            hx-swap="innerHTML">
+            Re-scan all open findings against rules
+        </button>
+        <a href="/api/v1/validation/known-issues-page" class="btn btn-secondary">
+            Manage Rules →
+        </a>
+        <div id="rescan-result" class="mono" style="font-size:12px;"></div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-title">Configuration Files</div>
+    <div style="font-family:var(--mono);font-size:12px;color:var(--text-secondary);line-height:2;">
+        <div>📁 config/credentials/ssh_defaults.yaml — SSH credential wordlist</div>
+        <div>📁 config/fingerprints/service_map.yaml — Nmap fingerprint → CVE mapping</div>
+        <div>📁 config/validation_profiles/ — Per-service validation profiles</div>
+        <div>📁 data/validation.db — SQLite database</div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-title">Environment</div>
+    <div style="font-family:var(--mono);font-size:12px;color:var(--text-secondary);line-height:2;">
+        <div>TOOL_NVD_API_KEY — {{ "Set" if has_api_key else "Not set" }}</div>
+        <div>TOOL_DB_PATH — /app/data/validation.db</div>
+        <div>TOOL_SCAN_TIMEOUT — 300s</div>
+        <div>TOOL_SCAN_WORKERS — <span class="mono">{{ default_workers }}</span> (min {{ workers_min }}, max {{ workers_max }})</div>
+        <div>TOOL_RETAIN_EXPLOITABLE — <span class="mono">{{ retain_exploitable }}</span> days</div>
+        <div>TOOL_RETAIN_NOT_EXPLOITABLE — <span class="mono">{{ retain_not_exploitable }}</span> days</div>
+        <div>TOOL_RETAIN_REJECTED — <span class="mono">{{ retain_rejected }}</span> days</div>
+        <div>TOOL_AUTO_ARCHIVE — <span class="mono">{{ "on" if auto_archive else "off" }}</span></div>
+    </div>
+</div>
+
+<div style="margin-top:24px;text-align:right;">
+    <a href="/api/v1/validation/history" class="text-muted" style="font-size:12px;">
+        View Full Audit Log →
+    </a>
+</div>
+{% endblock %}

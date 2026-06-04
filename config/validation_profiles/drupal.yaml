@@ -1,0 +1,27 @@
+service: http/https
+cms: drupal
+checks:
+  - name: drupalgeddon2
+    plugin: drupal_plugin
+    description: Non-destructive Drupalgeddon2 (CVE-2018-7600) reachability probe
+    severity_on_match: critical
+  - name: version_disclosure
+    plugin: drupal_plugin
+    description: Look for CHANGELOG / README files exposing the Drupal version
+    severity_on_match: medium
+  - name: default_files
+    plugin: drupal_plugin
+    description: Check whether sites/default/settings.php or its backup is readable
+    severity_on_match: critical
+  - name: admin_exposure
+    plugin: drupal_plugin
+    description: /admin redirect behaviour and /user/1 enumeration
+    severity_on_match: low
+  - name: api_exposure
+    plugin: drupal_plugin
+    description: xmlrpc.php availability and REST /api auth-bypass surface
+    severity_on_match: medium
+  - name: sqli_legacy
+    plugin: drupal_plugin
+    description: CVE-2014-3704 Drupageddon SQLi (skipped unless Drupal < 7.32 detected)
+    severity_on_match: critical

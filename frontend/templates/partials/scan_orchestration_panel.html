@@ -1,0 +1,933 @@
+{#
+  Partial: scan_orchestration_panel.html
+  Context: investigation, scans, summary, profiles, scanner_availability,
+           latest_findings, latest_scan, target, target_ctx
+  Usage: hx-get="/api/v1/validation/scanner/investigations/{id}/scans/partial"
+#}
+<div class="so-panel">
+
+  {# ── Summary bar ────────────────────────────────────────────────── #}
+  <div class="so-summary-bar">
+    <div class="so-summary-item">
+      <span class="so-summary-label">Scans run</span>
+      <span class="so-summary-value">{{ summary.total_scans }}</span>
+    </div>
+    <div class="so-summary-item">
+      <span class="so-summary-label">Completed</span>
+      <span class="so-summary-value so-value--ok">{{ summary.completed_scans }}</span>
+    </div>
+    <div class="so-summary-item">
+      <span class="so-summary-label">Active</span>
+      <span class="so-summary-value {% if summary.active_scans > 0 %}so-value--active{% endif %}">
+        {{ summary.active_scans }}
+      </span>
+    </div>
+    <div class="so-summary-item">
+      <span class="so-summary-label">Findings</span>
+      <span class="so-summary-value {% if summary.total_findings > 0 %}so-value--warn{% endif %}">
+        {{ summary.total_findings }}
+      </span>
+    </div>
+  </div>
+
+  {# ── Scan launch form — profile-primary UX ──────────────────────── #}
+  <div class="so-launch-form">
+    <div class="so-form-header">
+      <span style="font-weight:600;font-size:.82rem;">Launch Investigation Scan</span>
+      <span style="font-size:.7rem;color:var(--text-muted);">
+        Findings flow into evidence, skill tracking, and investigation timeline.
+      </span>
+    </div>
+    <div class="so-form-body">
+      <div class="so-form-row">
+        <div class="so-field" style="flex:2;">
+          <label class="form-label">Target
+            <span class="so-help" title="Enter a lab IP address, hostname, or URL (e.g. 192.168.1.100 or http://localhost:10000). Only approved lab targets are accepted.">?</span>
+          </label>
+          <input class="form-input" id="so-target"
+                 value="{{ target }}"
+                 placeholder="IP, hostname, or URL"
+                 style="font-family:var(--mono);"
+                 title="Enter an approved lab target: IP address, hostname, or URL.">
+        </div>
+        <div class="so-field" style="flex:1.5;">
+          <label class="form-label">Investigation Type
+            <span class="so-help" title="Choose the investigation strategy that matches your goal. Reconnaissance maps open services. Web Investigation finds common web vulnerabilities. CVE Validation confirms known CVEs against your target.">?</span>
+          </label>
+          <select class="form-select" id="so-profile" onchange="soProfileChanged()">
+            {% for p in profiles %}
+              {%- set cap = profile_capability.get(p.profile_id, {}) -%}
+              {%- set cap_state = cap.get('state', 'available') -%}
+              {%- if cap_state != 'unavailable' -%}
+              <option value="{{ p.profile_id }}"
+                      data-scanners="{{ p.scanners | join(',') }}"
+                      data-cap-state="{{ cap_state }}"
+                      data-first-scanner="{{ cap.get('first_available_scanner', p.scanners[0] if p.scanners else '') }}">
+                {{ p.title }}
+                {%- if cap_state == 'degraded' %} ⚠
+                {%- elif cap_state == 'starting' %} ⟳
+                {%- endif %}
+              </option>
+              {%- endif -%}
+            {% endfor %}
+          </select>
+          {# Show which investigation modes are offline #}
+          {%- set offline = [] -%}
+          {%- for p in profiles -%}
+            {%- set cap_state = profile_capability.get(p.profile_id, {}).get('state', 'available') -%}
+            {%- if cap_state == 'unavailable' -%}
+              {%- set _ = offline.append(p.title) -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {% if offline %}
+          <div class="so-offline-note">
+            ◌ {{ offline | join(', ') }} unavailable — ZAP or Nuclei not running
+          </div>
+          {% endif %}
+        </div>
+        <div class="so-field so-field--btn">
+          <label class="form-label">&nbsp;</label>
+          <button class="btn btn-primary" id="so-launch-btn" type="button"
+                  onclick="soLaunchScan('{{ investigation.investigation_id }}')"
+                  title="Start the investigation. Findings, evidence, and skill progression are captured automatically.">
+            ▶ Launch
+          </button>
+        </div>
+      </div>
+      <div id="so-launch-status" style="font-size:.75rem;margin-top:.3rem;"></div>
+
+      {# Profile description + capability note #}
+      <div class="so-profile-desc" id="so-profile-desc">
+        {% if profiles %}
+          {%- set first_cap = profile_capability.get(profiles[0].profile_id, {}) -%}
+          <span>{{ profiles[0].description }}</span>
+          <span class="so-profile-meta">
+            Est. {{ profiles[0].estimated_duration }} ·
+            stage: {{ profiles[0].investigation_stage }}
+          </span>
+          {% if first_cap.get('note') %}
+            <span class="so-cap-note so-cap-note--{{ first_cap.get('state', 'available') }}">
+              ⚠ {{ first_cap.note }}
+            </span>
+          {% endif %}
+        {% endif %}
+      </div>
+
+      {# ── Advanced Settings — operator/developer override (dev-only) #}
+      <details class="so-advanced dev-only">
+        <summary class="so-advanced-summary">Advanced Settings</summary>
+        <div class="so-advanced-body">
+          <div class="so-form-row" style="flex-wrap:wrap;gap:.4rem;align-items:flex-end;">
+            <div class="so-field" style="flex:0 0 auto;min-width:140px;">
+              <label class="form-label">Scanner Override</label>
+              <select class="form-select" id="so-scanner" style="font-size:.8rem;">
+                {% for scanner_type, status in scanner_availability.items() %}
+                  <option value="{{ scanner_type }}"
+                          {% if status != 'reachable' %}disabled{% endif %}>
+                    {{ scanner_type }}
+                    {%- if status == 'reachable' %} ✓
+                    {%- elif status == 'starting' %} ⟳
+                    {%- else %} ✕{%- endif %}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+            <div style="flex:1;font-size:.7rem;color:var(--text-muted);align-self:flex-end;padding-bottom:.25rem;">
+              Overrides the scanner selected by the profile. Use for debugging or operator workflows.
+            </div>
+          </div>
+          {# Scanner infrastructure status #}
+          <div class="so-scanner-status" style="margin-top:.5rem;">
+            {% for scanner_type, status in scanner_availability.items() %}
+            <span class="so-ss-item so-ss-item--{{ status }}">
+              <span class="so-ss-dot"></span>
+              <span class="so-ss-name">{{ scanner_type }}</span>
+              <span class="so-ss-badge so-ss-badge--{{ status }}">{{ status }}</span>
+              {% if status != 'reachable' %}
+                {%- set detail = scanner_status_detail.get(scanner_type, '') -%}
+                <span class="so-ss-hint">
+                  {%- if detail -%}— {{ detail }}{%- endif -%}
+                  {%- if scanner_type == 'zap' and status == 'unavailable' -%}
+                    &nbsp;·&nbsp;<code>docker compose up zap</code>
+                  {%- elif scanner_type == 'nuclei' and status == 'unavailable' and not detail -%}
+                    &nbsp;— nuclei binary not in PATH
+                  {%- endif -%}
+                </span>
+              {% endif %}
+            </span>
+            {% endfor %}
+          </div>
+        </div>
+      </details>
+    </div>
+  </div>
+
+  {# ── Investigation completion summary — shown first when results exist ── #}
+  {% if latest_run and latest_run.is_terminal %}
+  <div class="so-completion-card so-completion--{{ latest_confidence }}" id="so-completion-bar">
+    <div class="so-completion-bar">
+      <span class="so-completion-icon">
+        {%- if latest_confidence == 'ok' -%}✓
+        {%- elif latest_confidence == 'warn' -%}⚠
+        {%- else -%}✗{%- endif -%}
+      </span>
+      <span class="so-completion-msg">{{ latest_confidence_msg }}</span>
+      {% if latest_run.duration_seconds %}
+        <span class="so-completion-dur">· {{ latest_run.duration_seconds | round | int }}s</span>
+      {% endif %}
+      {% if latest_findings %}
+        {%- set n_crit = latest_findings | selectattr('severity', 'equalto', 'critical') | list | length -%}
+        {%- set n_high = latest_findings | selectattr('severity', 'equalto', 'high') | list | length -%}
+        {%- set n_med  = latest_findings | selectattr('severity', 'equalto', 'medium') | list | length -%}
+        <span class="so-completion-sev">
+          {% if n_crit > 0 %}<span style="color:var(--critical);">{{ n_crit }} crit</span>{% endif %}
+          {% if n_high > 0 %}<span style="color:var(--high);">{{ n_high }} high</span>{% endif %}
+          {% if n_med  > 0 %}<span style="color:var(--medium);">{{ n_med }} med</span>{% endif %}
+        </span>
+      {% endif %}
+      {% if evidence_count > 0 %}
+        <span class="so-completion-dur">· {{ evidence_count }} evidence</span>
+      {% endif %}
+      {% if skills_count > 0 %}
+        <span class="so-completion-dur">· {{ skills_count }} skill{{ 's' if skills_count != 1 }}</span>
+      {% endif %}
+    </div>
+
+    {# Next-step action buttons #}
+    <div class="so-next-steps">
+      <span class="so-next-label">Next:</span>
+      {% if latest_findings %}
+        <button class="btn btn-sm btn-primary so-next-btn"
+                onclick="document.getElementById('so-findings-panel').scrollIntoView({behavior:'smooth',block:'start'})">
+          Review findings ↓
+        </button>
+      {% endif %}
+      {% if skills_count > 0 or latest_findings %}
+        <button class="btn btn-sm btn-secondary so-next-btn"
+                onclick="wsTab('learning', document.querySelector('[data-tab=learning]'))">
+          ◉ Open Learning
+        </button>
+      {% endif %}
+      <button class="btn btn-sm btn-secondary so-next-btn"
+              onclick="wsTab('export', document.querySelector('[data-tab=export]'))">
+        ⬡ Generate Export
+      </button>
+      {% if latest_run.profile_id == 'quick_web_scan' and latest_findings %}
+        <span class="so-next-hint">
+          · For deeper analysis, run <strong>Web Vulnerability Learning Scan</strong>
+        </span>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {# ── Target diagnostics ─────────────────────────────────────────── #}
+  {% include "partials/target_diagnostics_panel.html" %}
+
+  {# ── Investigation run history ───────────────────────────────────── #}
+  {% if runs %}
+    <div class="so-history">
+      <div class="so-history-label">Investigation Runs</div>
+      {% for run in runs %}
+      <div class="so-run-card" id="so-run-{{ run.html_key }}">
+
+        {# ── Run header ──────────────────────────────────────────── #}
+        <div class="so-scan-row">
+          <div class="so-scan-info">
+            <span class="so-profile-chip so-profile-chip--run">{{ run.profile_title }}</span>
+            {% if run.stage_count > 1 %}
+              <span class="so-run-stages">{{ run.stages_done }}/{{ run.stage_count }} stages</span>
+            {% endif %}
+          </div>
+
+          {# Run-level status: poll the first non-terminal scan while running #}
+          <div class="so-scan-status">
+            {%- set active = run.scans | selectattr('is_terminal', 'equalto', false) | first -%}
+            {% if active %}
+              <div hx-get="/api/v1/validation/scanner/scans/{{ active.scan_id }}/status-partial"
+                   hx-trigger="load, every 3s"
+                   hx-swap="innerHTML">
+                <span class="qstatus qstatus-running">running</span>
+              </div>
+            {% else %}
+              {# All terminal — show aggregate #}
+              {%- set conf_cls = 'completed' if run.confidence == 'ok' else ('running' if run.confidence == 'warn' else 'failed') -%}
+              <span class="qstatus qstatus-{{ conf_cls }}">{{ run.status }}</span>
+              {% if run.total_findings > 0 %}
+                <span style="font-size:.7rem;margin-left:.35rem;font-family:var(--mono);">
+                  {{ run.total_findings }} finding(s)
+                </span>
+              {% endif %}
+              {% if run.duration_seconds %}
+                <span style="font-size:.68rem;color:var(--text-muted);font-family:var(--mono);">
+                  · {{ run.duration_seconds | round | int }}s
+                </span>
+              {% endif %}
+            {% endif %}
+          </div>
+
+          <span class="so-scan-ts mono">
+            {{ run.created_at | string | truncate(16, killwords=True, end='') }}
+          </span>
+          <button class="btn btn-secondary btn-sm so-expand-btn"
+                  onclick="soExpandRow('{{ run.html_key }}', '{{ run.scans[0].scan_id }}', {{ 'true' if run.group_id else 'false' }}, this)">
+            {% if loop.first and run.is_terminal and latest_findings %}Timeline ▲{% else %}Details ▼{% endif %}
+          </button>
+        </div>
+
+        {# ── Per-stage sub-rows (multi-scanner runs only) ─────────── #}
+        {% if run.stage_count > 1 %}
+        <div class="so-stage-list">
+          {% for scan in run.scans %}
+          <div class="so-stage-row">
+            <span class="so-stage-num">{{ loop.index }}</span>
+            <span class="so-stage-label">
+              {{ scanner_stage_labels.get(scan.scanner_type, scan.scanner_type) }}
+            </span>
+            <span class="mono so-scanner-badge so-scanner--{{ scan.scanner_type }}">
+              {{ scan.scanner_type }}
+            </span>
+            <div class="so-scan-status"
+              {% if not scan.is_terminal %}
+                hx-get="/api/v1/validation/scanner/scans/{{ scan.scan_id }}/status-partial"
+                hx-trigger="load, every 3s"
+                hx-swap="innerHTML"
+              {% endif %}>
+              <span class="qstatus qstatus-{{ scan.status }}">{{ scan.status }}</span>
+              {% if scan.findings_count > 0 %}
+                <span style="font-size:.68rem;margin-left:.2rem;font-family:var(--mono);">
+                  {{ scan.findings_count }}
+                </span>
+              {% endif %}
+            </div>
+            {% if scan.error_message %}
+              <span style="font-size:.67rem;color:var(--medium);" title="{{ scan.error_message }}">
+                ⚠
+              </span>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        {# ── Expanded detail — auto-shown for latest completed run ── #}
+        {%- set is_latest_complete = loop.first and run.is_terminal and latest_findings -%}
+        <div class="so-scan-expanded" id="so-expand-{{ run.html_key }}"
+             style="{{ '' if is_latest_complete else 'display:none' }}">
+          {% if is_latest_complete %}
+          {# Inline findings preview — no HTMX request needed #}
+          <div class="so-inline-findings">
+            {% for f in latest_findings[:4] %}
+            <div class="so-inline-finding so-inline-finding--{{ f.severity }}">
+              <span class="severity severity-{{ f.severity }}" style="font-size:.62rem;flex-shrink:0;">{{ f.severity }}</span>
+              <span class="so-finding-title" style="font-size:.73rem;">{{ f.title }}</span>
+              {% if f.port %}<span class="mono" style="font-size:.65rem;color:var(--text-muted);">:{{ f.port }}</span>{% endif %}
+            </div>
+            {% endfor %}
+            {% if latest_findings | length > 4 %}
+            <div style="font-size:.67rem;color:var(--text-muted);padding:.1rem .4rem;">
+              + {{ (latest_findings | length) - 4 }} more — see full list below ↓
+            </div>
+            {% endif %}
+          </div>
+          {% else %}
+          <div id="so-tl-{{ run.html_key }}" class="so-tl-placeholder">
+            <span class="spinner" style="width:.7rem;height:.7rem;"></span>
+          </div>
+          {% endif %}
+        </div>
+
+      </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty-state" style="padding:1.5rem 0;">
+      <span class="empty-state-icon">◉</span>
+      <p>No investigation runs yet. Launch a scan above to begin.</p>
+    </div>
+  {% endif %}
+
+  {# ── Normalized findings from latest scan ───────────────────────── #}
+  {% if latest_findings %}
+    <div class="so-findings-panel" id="so-findings-panel">
+      <div class="so-findings-label">
+        Findings
+        <span class="so-findings-meta">
+          {{ latest_findings | length }} identified
+          {%- if latest_run and latest_run.stage_count > 1 %} · across {{ latest_run.stages_complete }} stage{{ 's' if latest_run.stages_complete != 1 }}{%- endif -%}
+        </span>
+      </div>
+      <div class="so-findings-list">
+        {% for f in latest_findings %}
+          <div class="so-finding so-finding--{{ f.severity }}">
+            <span class="severity severity-{{ f.severity }}">{{ f.severity }}</span>
+            <div class="so-finding-info">
+              <span class="so-finding-title">{{ f.title }}</span>
+              <span class="mono so-finding-type">{{ f.finding_type }}</span>
+              {% if f.port %}
+                <span class="so-port mono">:{{ f.port }}</span>
+              {% endif %}
+              {% if f.endpoint %}
+                <span class="so-endpoint mono">{{ f.endpoint }}</span>
+              {% endif %}
+            </div>
+            <div class="so-finding-links">
+              {% for skill_id in f.related_skills[:2] %}
+                <span class="tag-chip" title="Skill: {{ skill_id }}">
+                  ◆ {{ skill_id | replace('_', ' ') }}
+                </span>
+              {% endfor %}
+              {% for path_id in f.related_learning_paths[:1] %}
+                <span class="tag-chip" title="Path: {{ path_id }}" style="background:color-mix(in srgb, var(--accent) 15%, transparent);">
+                  ◧ {{ path_id | replace('_', ' ') }}
+                </span>
+              {% endfor %}
+            </div>
+            <div class="so-finding-actions">
+              {% if f.related_learning_paths %}
+                <button class="btn btn-sm so-fa-btn so-fa-btn--learn"
+                        onclick="wsTab('learning', document.querySelector('[data-tab=learning]'))"
+                        title="Open the learning path for this finding type">
+                  ◧ Learn
+                </button>
+              {% endif %}
+              <button class="btn btn-sm so-fa-btn"
+                      onclick="wsTab('evidence', document.querySelector('[data-tab=evidence]'))"
+                      title="View or capture additional evidence">
+                ⬡ Evidence
+              </button>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+
+      {# ── Suggested next investigations ─────────────────────────── #}
+      {%- set has_port_or_service = latest_findings | selectattr('finding_type', 'in', ['open_port', 'service_exposure']) | list | length > 0 -%}
+      {%- set web_cap_state = profile_capability.get('web_learning_scan', {}).get('state', 'available') -%}
+      {%- set cve_cap_state = profile_capability.get('cve_validation_scan', {}).get('state', 'available') -%}
+      {%- set web_avail = web_cap_state != 'unavailable' -%}
+      {%- set cve_avail = cve_cap_state != 'unavailable' -%}
+      {% if has_port_or_service and (web_avail or cve_avail) %}
+      <div class="so-suggest-panel">
+        <div class="so-suggest-label">
+          ▶ Suggested next investigation:
+        </div>
+        <div class="so-suggest-desc">
+          Exposed services were detected. Run a deeper scan to test for web vulnerabilities or known CVEs.
+        </div>
+        <div class="so-suggest-buttons">
+          {% if web_avail %}
+            <button class="btn btn-primary btn-sm" onclick="soSuggestedScan('web_learning_scan')">
+              Run Web Vulnerability Scan →
+            </button>
+          {% endif %}
+          {% if cve_avail %}
+            <button class="btn btn-secondary btn-sm" onclick="soSuggestedScan('cve_validation_scan')">
+              Run CVE Validation →
+            </button>
+          {% endif %}
+        </div>
+      </div>
+      {% elif has_port_or_service %}
+      <div class="so-suggest-panel so-suggest-panel--blocked">
+        <div class="so-suggest-label">▶ Deeper investigation requires:</div>
+        <div class="so-suggest-desc">
+          Exposed services detected. Start ZAP and Nuclei to enable Web Vulnerability and CVE Validation scans.
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  {% endif %}
+
+</div>
+
+<script>
+(function() {
+  // Profile metadata embedded at render time
+  var profileData = {};
+  {% for p in profiles %}
+  profileData['{{ p.profile_id }}'] = {
+    desc: '{{ p.description | replace("'", "\\'") | truncate(120, killwords=True) }}',
+    scanners: {{ p.scanners | tojson }},
+    duration: '{{ p.estimated_duration }}',
+    stage: '{{ p.investigation_stage }}'
+  };
+  {% endfor %}
+
+  // Profile capability — derived from live scanner availability at render time
+  var profileCapability = {};
+  {% for p in profiles %}
+  {%- set cap = profile_capability.get(p.profile_id, {}) -%}
+  profileCapability['{{ p.profile_id }}'] = {
+    state: '{{ cap.get("state", "available") }}',
+    note: '{{ cap.get("note", "") | replace("'", "\\'") }}',
+    firstScanner: '{{ cap.get("first_available_scanner", p.scanners[0] if p.scanners else "") }}'
+  };
+  {% endfor %}
+
+  // Called when profile selection changes.
+  // Derives the correct scanner from profile capability and syncs the advanced override.
+  window.soProfileChanged = function() {
+    var profileSel = document.getElementById('so-profile');
+    var profile    = profileSel.value;
+    var info       = profileData[profile];
+    var cap        = profileCapability[profile] || {};
+    var desc       = document.getElementById('so-profile-desc');
+    var scannerSel = document.getElementById('so-scanner');
+
+    // Update description + capability note
+    if (info && desc) {
+      var capNote = cap.note
+        ? '<span class="so-cap-note so-cap-note--' + (cap.state || 'available') + '">⚠ ' + cap.note + '</span>'
+        : '';
+      desc.innerHTML =
+        '<span>' + info.desc + '</span>'
+        + '<span class="so-profile-meta">Est. ' + info.duration + ' · stage: ' + info.stage + '</span>'
+        + capNote;
+    }
+
+    // Seed the advanced scanner override to the profile's first available scanner.
+    // User may change this manually in Advanced Settings.
+    if (scannerSel && cap.firstScanner) {
+      scannerSel.value = cap.firstScanner;
+    }
+  };
+
+  // ── Findings poller ──────────────────────────────────────────────────
+  // Uses window-scoped state so it survives IIFE re-execution on panel reloads.
+  // Stops itself if: findings appear, max attempts reached, or user navigates away.
+  function soStartFindingsPoller(invId) {
+    if (window._soPoller) { clearInterval(window._soPoller); }
+    var attempts = 0;
+    window._soPoller = setInterval(function() {
+      // Safety: stop if the tab pane is gone (user navigated away)
+      if (!document.getElementById('ws-tab-scans')) {
+        clearInterval(window._soPoller);
+        window._soPoller = null;
+        return;
+      }
+      attempts++;
+      var fp = document.getElementById('so-findings-panel');
+      var cb = document.getElementById('so-completion-bar');
+      if (fp || cb || attempts >= 8) {
+        clearInterval(window._soPoller);
+        window._soPoller = null;
+        var el = cb || fp;
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+      }
+      htmx.ajax(
+        'GET',
+        '/api/v1/validation/scanner/investigations/' + invId + '/scans/partial',
+        { target: '#ws-tab-scans', swap: 'innerHTML' }
+      );
+    }, 5000);
+  }
+
+  window.soLaunchScan = function(invId) {
+    var target  = document.getElementById('so-target').value.trim();
+    var profile = document.getElementById('so-profile').value;
+    var status  = document.getElementById('so-launch-status');
+    var btn     = document.getElementById('so-launch-btn');
+    if (!target) { status.textContent = 'Target is required.'; return; }
+    btn.disabled = true;
+    btn.textContent = '⏳ Launching…';
+    status.textContent = '';
+    fetch('/api/v1/validation/scanner/investigations/' + invId + '/runs', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({profile_id: profile, target: target})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.detail) {
+        status.textContent = 'Error: ' + data.detail;
+        btn.disabled = false;
+        btn.textContent = '▶ Launch';
+      } else {
+        status.textContent = '✓ Launched — loading progress…';
+        // Initial reload to show the queued run
+        setTimeout(function() {
+          htmx.ajax(
+            'GET',
+            '/api/v1/validation/scanner/investigations/' + invId + '/scans/partial',
+            { target: '#ws-tab-scans', swap: 'innerHTML' }
+          );
+          status.textContent = '';
+          // Start fallback poller — reloads panel every 5s until findings appear
+          soStartFindingsPoller(invId);
+        }, 1200);
+        btn.disabled = false;
+        btn.textContent = '▶ Launch';
+      }
+    })
+    .catch(function() {
+      status.textContent = 'Network error.';
+      btn.disabled = false;
+      btn.textContent = '▶ Launch';
+    });
+  };
+
+  window.soToggleFindings = function(scanId) {
+    var panel = document.getElementById('so-findings-panel');
+    if (panel) panel.scrollIntoView({behavior:'smooth', block:'nearest'});
+  };
+
+  // Pre-select a profile in the launch form and scroll to it. Used by the
+  // "Suggested next investigation" buttons below the findings list.
+  window.soSuggestedScan = function(profileId) {
+    var sel = document.getElementById('so-profile');
+    if (!sel) return;
+    // Verify the profile is selectable (option exists and is not disabled)
+    var opt = sel.querySelector('option[value="' + profileId + '"]');
+    if (!opt) return;
+    sel.value = profileId;
+    if (typeof soProfileChanged === 'function') soProfileChanged();
+    var form = document.querySelector('.so-launch-form');
+    if (form) form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    var target = document.getElementById('so-target');
+    if (target) {
+      setTimeout(function() { target.focus(); }, 400);
+    }
+  };
+
+  // Run connectivity check using the CURRENT target input value.
+  // Uses the live value of #so-target so it works regardless of what
+  // target the investigation was originally created with.
+  window.soRunDiagnostics = function() {
+    var targetEl = document.getElementById('so-target');
+    var target = (targetEl ? targetEl.value : '').trim();
+    if (!target) {
+      alert('Enter a target URL first (e.g. http://localhost:10000)');
+      return;
+    }
+    var panel = document.getElementById('td-diagnostics-panel');
+    if (panel) {
+      panel.innerHTML =
+        '<div class="td-panel" id="td-diagnostics-panel" style="padding:.65rem .8rem;">'
+        + '<div class="td-header"><span class="td-title">Target Diagnostics</span></div>'
+        + '<div style="display:flex;align-items:center;gap:.5rem;font-size:.75rem;'
+        + 'color:var(--text-muted);"><span class="spinner"></span>'
+        + 'Checking ' + target.replace(/</g,'&lt;') + '…</div></div>';
+    }
+    htmx.ajax(
+      'GET',
+      '/api/v1/validation/scanner/target-diagnostics/partial?url=' + encodeURIComponent(target),
+      { target: '#td-diagnostics-panel', swap: 'outerHTML' }
+    );
+  };
+
+  // Expand/collapse a run row and lazy-load the investigation timeline.
+  // htmlKey  = run.html_key (group_id for grouped runs, scan_id for legacy single scans).
+  // scanId   = first scan's scan_id (fallback for single-scan runs).
+  // isGroup  = true when the run has a group_id (multi or single-scanner grouped run).
+  window.soExpandRow = function(htmlKey, scanId, isGroup, btn) {
+    var expanded = document.getElementById('so-expand-' + htmlKey);
+    if (!expanded) return;
+    var open = expanded.style.display !== 'none';
+    if (open) {
+      expanded.style.display = 'none';
+      btn.textContent = 'Details ▼';
+    } else {
+      expanded.style.display = '';
+      btn.textContent = 'Details ▲';
+      var tl = document.getElementById('so-tl-' + htmlKey);
+      if (tl && tl.classList.contains('so-tl-placeholder')) {
+        // Grouped runs get the aggregated run timeline; legacy single scans get per-scan timeline
+        var url = isGroup
+          ? '/api/v1/validation/scanner/runs/' + htmlKey + '/timeline-partial'
+          : '/api/v1/validation/scanner/scans/' + scanId + '/timeline-partial';
+        htmx.ajax('GET', url, { target: '#so-tl-' + htmlKey, swap: 'innerHTML' });
+      }
+    }
+  };
+
+  // ── htmx:afterSettle listener ─────────────────────────────────────
+  // Must be idempotent: remove previous instance before adding to prevent
+  // listener accumulation across panel reloads (each HTMX swap re-runs this IIFE).
+  if (window._soAfterSettle) {
+    document.removeEventListener('htmx:afterSettle', window._soAfterSettle);
+  }
+  window._soAfterSettle = function(evt) {
+    if (evt.target && evt.target.id === 'ws-tab-scans') {
+      var cb = document.getElementById('so-completion-bar');
+      var fp = document.getElementById('so-findings-panel');
+      if (cb || fp) {
+        if (window._soPoller) { clearInterval(window._soPoller); window._soPoller = null; }
+        var el = cb || fp;
+        setTimeout(function() { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 150);
+      }
+    }
+  };
+  document.addEventListener('htmx:afterSettle', window._soAfterSettle);
+
+  // Initialize on load — seeds the advanced scanner override to the default profile's
+  // first available scanner so soLaunchScan always has a valid scanner value.
+  soProfileChanged();
+})();
+</script>
+
+<style>
+.so-panel      { padding: .25rem 0; }
+.so-summary-bar {
+  display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: .75rem;
+}
+.so-summary-item {
+  background: var(--bg-raised); border: 1px solid var(--border);
+  border-radius: 5px; padding: .45rem .7rem;
+  display: flex; flex-direction: column; gap: .1rem; min-width: 80px;
+}
+.so-summary-label { font-size: .62rem; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); }
+.so-summary-value { font-size: 1.1rem; font-weight: 700; font-family: var(--mono); color: var(--text-muted); }
+.so-value--ok     { color: var(--low); }
+.so-value--active { color: var(--accent); }
+.so-value--warn   { color: var(--medium); }
+
+/* Launch form */
+.so-launch-form {
+  background: color-mix(in srgb, var(--accent) 4%, var(--bg-raised));
+  border: 1px solid var(--border); border-radius: 6px;
+  margin-bottom: .75rem; overflow: hidden;
+}
+.so-form-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: .55rem .85rem; border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.so-form-body    { padding: .65rem .85rem; display: flex; flex-direction: column; gap: .45rem; }
+.so-form-row     { display: flex; gap: .45rem; flex-wrap: wrap; align-items: flex-end; }
+.so-field        { display: flex; flex-direction: column; gap: .18rem; flex: 1; min-width: 120px; }
+.so-field--btn   { flex: 0 0 auto; }
+.so-profile-desc {
+  font-size: .72rem; color: var(--text-muted);
+  display: flex; gap: .5rem; flex-wrap: wrap; align-items: baseline;
+}
+.so-profile-meta { color: var(--text-muted); font-family: var(--mono); font-size: .68rem; }
+.so-offline-note { font-size: .67rem; color: var(--text-muted); margin-top: .15rem; font-family: var(--mono); }
+.so-help { display: inline-flex; align-items: center; justify-content: center; width: .9rem; height: .9rem; border-radius: 50%; background: var(--bg-raised); border: 1px solid var(--border); font-size: .58rem; color: var(--text-muted); cursor: default; margin-left: .2rem; font-style: normal; }
+
+/* Profile capability note */
+.so-cap-note { font-size: .7rem; font-family: var(--mono); }
+.so-cap-note--degraded   { color: var(--medium); }
+.so-cap-note--starting   { color: var(--accent); }
+.so-cap-note--unavailable { color: var(--critical); }
+
+/* Advanced Settings collapsible */
+.so-advanced { margin-top: .3rem; }
+.so-advanced-summary {
+  font-size: .7rem; color: var(--text-muted); cursor: pointer;
+  user-select: none; padding: .2rem 0; list-style: none;
+}
+.so-advanced-summary::-webkit-details-marker { display: none; }
+.so-advanced-summary::before { content: '▶ '; font-size: .6rem; }
+details[open] .so-advanced-summary::before { content: '▼ '; }
+.so-advanced-body {
+  padding: .6rem .7rem; margin-top: .3rem;
+  background: var(--bg-raised); border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+/* Scan history */
+.so-history       { margin-bottom: .65rem; }
+.so-history-label { font-size: .65rem; text-transform: uppercase; letter-spacing: .08em; color: var(--text-muted); border-bottom: 1px solid var(--border); padding-bottom: .3rem; margin-bottom: .4rem; }
+.so-scan-row      { display: flex; align-items: center; gap: .5rem; padding: .4rem .1rem; border-bottom: 1px solid color-mix(in srgb, var(--border) 40%, transparent); flex-wrap: wrap; }
+.so-scan-row:last-child { border-bottom: none; }
+.so-scan-info     { display: flex; align-items: center; gap: .4rem; flex: 1; min-width: 0; flex-wrap: wrap; }
+.so-scanner-badge { font-size: .65rem; border-radius: 3px; padding: 1px 5px; font-weight: 600; text-transform: uppercase; }
+.so-scanner--nmap   { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); }
+.so-scanner--zap    { background: color-mix(in srgb, var(--medium) 15%, transparent); color: var(--medium); }
+.so-scanner--nuclei { background: color-mix(in srgb, var(--high) 15%, transparent); color: var(--high); }
+.so-profile-chip  { font-size: .65rem; color: var(--text-muted); font-family: var(--mono); background: var(--bg-raised); border: 1px solid var(--border); border-radius: 3px; padding: 1px 4px; }
+.so-scan-status   { display: flex; align-items: center; gap: .3rem; flex-shrink: 0; }
+.so-scan-ts       { font-size: .67rem; color: var(--text-muted); flex-shrink: 0; }
+.so-error         { font-size: .68rem; color: var(--critical); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Investigation run card */
+.so-run-card { border-bottom: 1px solid color-mix(in srgb, var(--border) 40%, transparent); margin-bottom: .1rem; }
+.so-run-card:last-child { border-bottom: none; }
+.so-profile-chip--run { font-weight: 600; font-size: .72rem; background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
+.so-run-stages { font-size: .65rem; font-family: var(--mono); color: var(--text-muted); background: var(--bg-raised); border: 1px solid var(--border); border-radius: 3px; padding: 1px 5px; }
+
+/* Per-stage sub-rows */
+.so-stage-list { padding: .2rem 0 .3rem 1.1rem; display: flex; flex-direction: column; gap: .15rem; }
+.so-stage-row  { display: flex; align-items: center; gap: .35rem; font-size: .7rem; flex-wrap: wrap; }
+.so-stage-num  { font-family: var(--mono); font-size: .62rem; color: var(--text-muted); width: .8rem; flex-shrink: 0; }
+.so-stage-label { color: var(--text-secondary); min-width: 6rem; }
+
+/* Expanded scan row */
+.so-scan-expanded {
+  width: 100%; padding: .5rem .75rem .4rem;
+  background: color-mix(in srgb, var(--bg-raised) 60%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+  margin-bottom: .15rem;
+}
+.so-tl-placeholder { display: flex; align-items: center; gap: .35rem; font-size: .72rem; color: var(--text-muted); }
+.so-expand-btn { font-size: .68rem; padding: 2px 6px; flex-shrink: 0; }
+
+/* Investigation completion card — wraps the status bar + next-steps row */
+.so-completion-card {
+  margin-bottom: .55rem; border-radius: 5px;
+  border: 1px solid var(--border); overflow: hidden;
+}
+.so-completion--ok    { background: color-mix(in srgb, var(--low) 7%, var(--bg-raised));
+                         border-color: color-mix(in srgb, var(--low) 22%, var(--border)); }
+.so-completion--warn  { background: color-mix(in srgb, var(--medium) 7%, var(--bg-raised));
+                         border-color: color-mix(in srgb, var(--medium) 22%, var(--border)); }
+.so-completion--error { background: color-mix(in srgb, var(--critical) 7%, var(--bg-raised));
+                         border-color: color-mix(in srgb, var(--critical) 22%, var(--border)); }
+
+/* Top status row inside the card */
+.so-completion-bar {
+  display: flex; align-items: center; gap: .45rem; flex-wrap: wrap;
+  padding: .5rem .7rem .4rem; font-size: .75rem;
+}
+
+/* Next-step buttons row */
+.so-next-steps {
+  display: flex; align-items: center; gap: .4rem; flex-wrap: wrap;
+  padding: .35rem .7rem .5rem;
+  border-top: 1px dashed color-mix(in srgb, var(--border) 60%, transparent);
+  background: color-mix(in srgb, var(--bg-raised) 30%, transparent);
+}
+.so-next-label {
+  font-size: .65rem; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--text-muted); font-weight: 600; margin-right: .25rem;
+}
+.so-next-btn { font-size: .7rem; padding: 3px 9px; }
+.so-next-hint {
+  font-size: .67rem; color: var(--text-muted); font-style: italic;
+  margin-left: .35rem;
+}
+.so-completion-icon { font-size: .8rem; flex-shrink: 0; }
+.so-completion--ok .so-completion-icon    { color: var(--low); }
+.so-completion--warn .so-completion-icon  { color: var(--medium); }
+.so-completion--error .so-completion-icon { color: var(--critical); }
+.so-completion-msg   { font-weight: 600; }
+.so-completion-dur   { font-family: var(--mono); font-size: .68rem; color: var(--text-muted); }
+.so-completion-sev   { display: flex; gap: .3rem; font-family: var(--mono); font-size: .68rem; }
+.so-completion-note  { font-size: .67rem; color: var(--text-muted); margin-left: auto; }
+
+/* Findings */
+.so-findings-panel { margin-top: .65rem; }
+.so-findings-label { font-size: .65rem; text-transform: uppercase; letter-spacing: .08em; color: var(--text-muted); border-bottom: 1px solid var(--border); padding-bottom: .3rem; margin-bottom: .4rem; display: flex; align-items: center; gap: .5rem; }
+.so-findings-meta  { font-family: var(--mono); font-size: .65rem; color: var(--text-muted); }
+.so-findings-list  { display: flex; flex-direction: column; gap: .3rem; }
+.so-finding        { display: flex; align-items: center; gap: .5rem; padding: .35rem .5rem; background: var(--bg-raised); border: 1px solid var(--border); border-radius: 4px; border-left: 3px solid var(--border); flex-wrap: wrap; }
+.so-finding--critical { border-left-color: var(--critical); }
+.so-finding--high     { border-left-color: var(--high); }
+.so-finding--medium   { border-left-color: var(--medium); }
+.so-finding--low      { border-left-color: var(--low); }
+.so-finding-info   { display: flex; align-items: center; gap: .4rem; flex: 1; min-width: 0; flex-wrap: wrap; }
+.so-finding-title  { font-size: .78rem; font-weight: 500; }
+.so-finding-type   { font-size: .65rem; color: var(--text-muted); }
+.so-port, .so-endpoint { font-size: .65rem; color: var(--text-muted); }
+.so-finding-links  { display: flex; gap: .25rem; flex-wrap: wrap; }
+
+/* Per-finding action buttons */
+.so-finding-actions { display: flex; gap: .25rem; flex-shrink: 0; }
+.so-fa-btn { font-size: .65rem; padding: 2px 7px; }
+.so-fa-btn--learn {
+  background: color-mix(in srgb, var(--accent) 15%, var(--bg-raised));
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+  color: var(--accent);
+}
+
+/* Suggested next investigation panel */
+.so-suggest-panel {
+  margin-top: .65rem; padding: .55rem .75rem;
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg-raised));
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+  border-radius: 5px;
+}
+.so-suggest-panel--blocked {
+  background: color-mix(in srgb, var(--medium) 5%, var(--bg-raised));
+  border-color: color-mix(in srgb, var(--medium) 22%, var(--border));
+}
+.so-suggest-label {
+  font-size: .72rem; font-weight: 600; color: var(--accent);
+  margin-bottom: .25rem;
+}
+.so-suggest-panel--blocked .so-suggest-label { color: var(--medium); }
+.so-suggest-desc {
+  font-size: .7rem; color: var(--text-secondary); margin-bottom: .45rem;
+  line-height: 1.4;
+}
+.so-suggest-buttons { display: flex; gap: .35rem; flex-wrap: wrap; }
+
+/* Inline findings preview inside auto-expanded run card */
+.so-inline-findings { display: flex; flex-direction: column; gap: .18rem; }
+.so-inline-finding  { display: flex; align-items: center; gap: .4rem; padding: .15rem .4rem; border-radius: 3px; background: color-mix(in srgb, var(--bg-raised) 80%, transparent); }
+.so-inline-finding--critical { border-left: 2px solid var(--critical); }
+.so-inline-finding--high     { border-left: 2px solid var(--high); }
+.so-inline-finding--medium   { border-left: 2px solid var(--medium); }
+.so-inline-finding--low      { border-left: 2px solid var(--low); }
+.so-inline-finding--info     { border-left: 2px solid var(--border); }
+
+/* Live activity log (terminal-style, shown in status-partial while running) */
+.so-live-log {
+  width: 100%; margin-top: .4rem; padding: .45rem .6rem;
+  background: color-mix(in srgb, #000 30%, var(--bg-raised));
+  border: 1px solid var(--border); border-radius: 4px;
+  font-family: var(--mono); font-size: .68rem;
+  max-height: 240px; overflow-y: auto;
+}
+.so-log-title {
+  font-size: .6rem; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--text-muted); margin-bottom: .3rem; font-weight: 600;
+}
+.so-log-line {
+  display: flex; gap: .4rem; padding: 1px 0; align-items: baseline;
+  white-space: nowrap; overflow: hidden;
+}
+.so-log-ts   { color: var(--text-muted); flex-shrink: 0; font-size: .62rem; }
+.so-log-icon { flex-shrink: 0; width: .8rem; text-align: center; }
+.so-log-msg  { color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; flex: 1; }
+.so-log-detail { color: var(--text-muted); font-size: .65rem; }
+.so-log-ok    .so-log-icon { color: var(--low); }
+.so-log-ok    .so-log-msg  { color: var(--text-primary); }
+.so-log-err   .so-log-icon { color: var(--critical); }
+.so-log-err   .so-log-msg  { color: var(--critical); }
+.so-log-active .so-log-icon { color: var(--accent); }
+.so-log-active .so-log-msg  { color: var(--accent); font-weight: 500; }
+.so-log-info  .so-log-icon { color: var(--text-muted); }
+.so-log-pulse {
+  border-top: 1px dashed color-mix(in srgb, var(--accent) 25%, var(--border));
+  margin-top: .3rem; padding-top: .3rem;
+}
+.so-log-pulse .so-log-icon { color: var(--accent); animation: so-pulse 1.5s ease-in-out infinite; }
+.so-log-pulse .so-log-msg  { color: var(--accent); }
+@keyframes so-pulse {
+  0%, 100% { opacity: 0.5; }
+  50%      { opacity: 1; }
+}
+
+/* Scanner status strip */
+.so-scanner-status {
+  display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: .6rem;
+  padding: .4rem .6rem; background: var(--bg-raised);
+  border: 1px solid var(--border); border-radius: 4px;
+}
+.so-ss-item { display: flex; align-items: center; gap: .3rem; font-size: .72rem; flex-wrap: wrap; }
+.so-ss-dot  { width: .5rem; height: .5rem; border-radius: 50%; flex-shrink: 0; }
+/* Status dot colours */
+.so-ss-item--reachable   .so-ss-dot { background: var(--low); }
+.so-ss-item--starting    .so-ss-dot { background: var(--medium); }
+.so-ss-item--degraded    .so-ss-dot { background: var(--high); }
+.so-ss-item--unavailable .so-ss-dot { background: var(--text-muted); }
+/* Text colours */
+.so-ss-item--reachable   { color: var(--text-secondary); }
+.so-ss-item--starting    { color: var(--medium); }
+.so-ss-item--degraded    { color: var(--high); }
+.so-ss-item--unavailable { color: var(--text-muted); }
+/* Status badge pill */
+.so-ss-name  { font-family: var(--mono); font-weight: 600; }
+.so-ss-badge { font-size: .6rem; border-radius: 3px; padding: 0 4px; font-family: var(--mono); text-transform: uppercase; letter-spacing: .04em; }
+.so-ss-badge--reachable   { background: color-mix(in srgb, var(--low) 15%, transparent);    color: var(--low); }
+.so-ss-badge--starting    { background: color-mix(in srgb, var(--medium) 15%, transparent);  color: var(--medium); }
+.so-ss-badge--degraded    { background: color-mix(in srgb, var(--high) 15%, transparent);    color: var(--high); }
+.so-ss-badge--unavailable { background: color-mix(in srgb, var(--text-muted) 12%, transparent); color: var(--text-muted); }
+/* Hint / detail text */
+.so-ss-hint { font-family: var(--mono); font-size: .65rem; color: var(--text-muted); }
+.so-ss-hint code { font-family: var(--mono); background: color-mix(in srgb, var(--accent) 12%, transparent); border-radius: 3px; padding: 0 3px; }
+</style>

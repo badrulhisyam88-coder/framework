@@ -1,0 +1,92 @@
+{#
+  Partial: investigation_timeline_panel.html
+  Context: investigation, events (list[TimelineEvent]), event_labels, stage_labels
+  Usage:
+    hx-get="/api/v1/validation/investigation-core/investigations/{id}/timeline/partial"
+    hx-trigger="load"
+#}
+
+<div class="timeline-panel">
+  {% if not events %}
+    <div class="empty-state" style="padding:1.5rem 0;">
+      <span class="empty-state-icon">◎</span>
+      <p>No timeline events yet. Events are recorded automatically as investigation activity occurs.</p>
+    </div>
+  {% else %}
+    <ol class="timeline-list">
+      {% for ev in events %}
+        <li class="timeline-item timeline-item--{{ ev.event_type }}">
+          <span class="timeline-dot
+            {% if ev.event_type in ('finding_detected', 'finding_validated') %}timeline-dot--warn
+            {% elif ev.event_type == 'investigation_created' %}timeline-dot--info
+            {% elif ev.event_type in ('learning_path_started', 'learning_step_completed') %}timeline-dot--ok
+            {% elif ev.event_type == 'knowledge_exported' %}timeline-dot--exported
+            {% elif ev.event_type == 'stage_advanced' %}timeline-dot--stage
+            {% else %}timeline-dot--default{% endif %}
+          "></span>
+          <div class="timeline-body">
+            <span class="timeline-time" title="{{ ev.timestamp }}">
+              {{ ev.timestamp | string | truncate(16, killwords=True, end='') }}
+            </span>
+            <span class="timeline-actor {% if ev.actor == 'user' %}timeline-actor--user{% endif %}">
+              {% if ev.actor == 'user' %}▲ user{% else %}⊙ system{% endif %}
+            </span>
+            <p class="timeline-summary">{{ ev.summary }}</p>
+            {% if ev.detail %}
+              <details class="timeline-detail">
+                <summary>detail</summary>
+                <pre class="timeline-detail-pre">{{ ev.detail | tojson(indent=2) }}</pre>
+              </details>
+            {% endif %}
+          </div>
+        </li>
+      {% endfor %}
+    </ol>
+  {% endif %}
+</div>
+
+<style>
+.timeline-panel { padding: .25rem 0; }
+.timeline-list  { list-style: none; margin: 0; padding: 0; position: relative; }
+.timeline-list::before {
+  content: '';
+  position: absolute;
+  left: .55rem; top: 0; bottom: 0;
+  width: 2px;
+  background: var(--border);
+}
+.timeline-item  {
+  display: flex; gap: .75rem; padding: .45rem 0;
+  position: relative;
+}
+.timeline-dot   {
+  flex-shrink: 0;
+  width: 1.1rem; height: 1.1rem;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: var(--bg-raised);
+  margin-top: .15rem;
+  z-index: 1;
+}
+.timeline-dot--warn     { border-color: var(--high); background: color-mix(in srgb, var(--high) 20%, var(--bg-raised)); }
+.timeline-dot--ok       { border-color: var(--low);  background: color-mix(in srgb, var(--low) 20%, var(--bg-raised)); }
+.timeline-dot--info     { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 20%, var(--bg-raised)); }
+.timeline-dot--stage    { border-color: var(--text-secondary); }
+.timeline-dot--exported { border-color: var(--matched); background: color-mix(in srgb, var(--matched) 20%, var(--bg-raised)); }
+.timeline-body  { flex: 1; min-width: 0; }
+.timeline-time  { font-size: .7rem; color: var(--text-muted); font-family: var(--mono); margin-right: .4rem; }
+.timeline-actor { font-size: .65rem; color: var(--text-muted); font-family: var(--mono);
+                  background: var(--bg-raised); border: 1px solid var(--border);
+                  border-radius: 3px; padding: 0 .25rem; margin-right: .4rem; }
+.timeline-actor--user { color: var(--accent); border-color: var(--accent); }
+.timeline-summary { margin: .15rem 0 0; font-size: .8rem; color: var(--text-secondary); }
+.timeline-detail { margin-top: .25rem; }
+.timeline-detail summary { font-size: .7rem; color: var(--text-muted); cursor: pointer; }
+.timeline-detail-pre {
+  font-size: .7rem; font-family: var(--mono);
+  background: var(--bg-raised); border: 1px solid var(--border);
+  border-radius: 4px; padding: .5rem; margin-top: .25rem;
+  overflow-x: auto; white-space: pre-wrap; word-break: break-all;
+  color: var(--text-secondary);
+}
+</style>

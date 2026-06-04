@@ -1,0 +1,152 @@
+{#
+  Phase C-3 — Structured result Zone 3 partial.
+
+  Context variables:
+    parsed           ParsedResult  — from result_parser.parse_engine_result()
+    finding_id       str
+    investigation_id str
+    next_options     list[TechniqueOption] — top 1-2 vault suggestions (may be empty)
+    payload_variants list[dict]    — Phase E: {"title","description","payload_hint"}
+    concept_id       str           — Phase E: concept_id of the executed technique
+
+  Replaces the result-zone div via htmx swap="outerHTML".
+#}
+
+{# Status badge colors #}
+{% if parsed.status == "success" %}
+  {% set badge_bg = "bg-[#dafbe1]" %}
+  {% set badge_text = "text-[#1a7f37]" %}
+  {% set badge_label = "✓ Success" %}
+{% elif parsed.status == "exhausted" %}
+  {% set badge_bg = "bg-[#fff8c5]" %}
+  {% set badge_text = "text-amber-700" %}
+  {% set badge_label = "⊘ Exhausted" %}
+{% elif parsed.status == "partial" %}
+  {% set badge_bg = "bg-[#ddf4ff]" %}
+  {% set badge_text = "text-[#0969da]" %}
+  {% set badge_label = "◷ Partial" %}
+{% else %}
+  {% set badge_bg = "bg-[#ffebe9]" %}
+  {% set badge_text = "text-[#cf222e]" %}
+  {% set badge_label = "✕ No Result" %}
+{% endif %}
+
+<div id="result-zone-{{ finding_id }}"
+     style="min-height:48px;"
+     class="rounded-md border border-[#d0d7de] text-xs mt-1">
+
+  {# ── Header: status + engine ──────────────────────────────────── #}
+  <div class="flex items-center gap-2 px-2 py-1.5 border-b border-[#e8eaed]">
+    <span class="{{ badge_bg }} {{ badge_text }} text-[10px] font-medium px-1.5 py-0.5 rounded">
+      {{ badge_label }}
+    </span>
+    <span class="text-zinc-400 text-[10px]">{{ parsed.engine_id }}</span>
+  </div>
+
+  {# ── Summary ───────────────────────────────────────────────────── #}
+  <div class="px-2 py-1.5 text-[11px] text-[#1f2328] leading-snug">
+    {{ parsed.summary }}
+  </div>
+
+  {# ── Key findings ──────────────────────────────────────────────── #}
+  {% if parsed.key_findings %}
+  <ul class="px-2 pb-1.5 space-y-0.5">
+    {% for f in parsed.key_findings %}
+    <li class="flex gap-1 text-[10px] text-[#656d76]">
+      <span class="shrink-0">·</span>
+      <span>{{ f }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  {# ── Session captured badge ────────────────────────────────────── #}
+  {% if parsed.session_captured %}
+  <div class="px-2 pb-1.5">
+    <span class="inline-flex items-center gap-1 bg-[#dafbe1] text-[#1a7f37] text-[10px] px-1.5 py-0.5 rounded">
+      🔑 Session captured — js_spider and subsequent engines can now run
+    </span>
+  </div>
+  {% endif %}
+
+  {# ── Phase E Part 1: Layer 3 payload variants ──────────────────── #}
+  {# Only when status is success or partial — not on fail/exhausted     #}
+  {% if parsed.status in ("success", "partial") and payload_variants %}
+  <div class="border-t border-[#e8eaed] px-2 py-1.5">
+    <div class="text-[10px] text-zinc-400 mb-1">Extract further?</div>
+    <form id="variant-form-{{ finding_id }}">
+    <div class="space-y-1">
+      {% for v in payload_variants %}
+      <label class="flex items-start gap-2 cursor-pointer rounded px-1.5 py-1
+                     hover:bg-zinc-50 {% if loop.first %}bg-zinc-50{% endif %}">
+        <input type="radio" name="variant_{{ finding_id }}" value="{{ loop.index0 }}"
+               class="mt-0.5 shrink-0" {% if loop.first %}checked{% endif %}
+               onchange="window._variantUpdate('{{ finding_id }}')">
+        <div>
+          <div class="text-[11px] font-medium text-[#1f2328]">{{ v.title }}</div>
+          {% if v.description %}<div class="text-[10px] text-zinc-400">{{ v.description }}</div>{% endif %}
+        </div>
+      </label>
+      {% endfor %}
+    </div>
+    <div class="mt-1.5">
+      <button id="variant-btn-{{ finding_id }}"
+              type="button"
+              class="rounded bg-[#1f2328] hover:bg-zinc-700 px-2.5 py-1 text-[11px] text-white"
+              hx-post="/api/v1/validation/workspace/investigations/{{ investigation_id }}/execute-variant"
+              hx-target="#result-zone-{{ finding_id }}"
+              hx-swap="outerHTML"
+              hx-include="#variant-form-{{ finding_id }}"
+              hx-vals='{"engine_id":"{{ parsed.engine_id }}","concept_id":"{{ concept_id }}","finding_id":"{{ finding_id }}"}'>
+        Execute Next Step →
+      </button>
+    </div>
+    </form>
+    <script>
+    window._variantUpdate = function(fid) {};  // placeholder for future state management
+    </script>
+  </div>
+  {% endif %}
+
+  {# ── "What's next?" hint ───────────────────────────────────────── #}
+  {% if next_options %}
+  <div class="border-t border-[#e8eaed] px-2 py-1.5">
+    <div class="text-[10px] text-zinc-400 mb-0.5">Suggested next:</div>
+    {% for opt in next_options %}
+    <button
+      class="block text-left text-[11px] text-[#0969da] hover:underline py-0.5"
+      onclick="window._selCardUpdateTo('{{ finding_id }}', '{{ opt.engine_id or '' }}')">
+      → {{ opt.title }}
+    </button>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {# ── Phase D2: model advisor suggestion ────────────────────────────── #}
+  {% if model_advice and model_advice.engine_id %}
+  <div class="border-t border-[#e8eaed] px-2 py-1.5">
+    <div class="text-[10px] text-[#7c3aed] mb-0.5">AI suggests:</div>
+    <button
+      class="block text-left text-[11px] text-[#7c3aed] hover:underline py-0.5"
+      onclick="window._selCardUpdateTo('{{ finding_id }}', '{{ model_advice.engine_id }}')">
+      → {{ model_advice.title }}
+    </button>
+  </div>
+  {% endif %}
+
+  {# Minimal JS: _selCardUpdateTo sets a specific radio and updates the execute button #}
+  {% if next_options or (model_advice and model_advice.engine_id) %}
+  <script>
+  window._selCardUpdateTo = function(findingId, engineId) {
+    var form = document.getElementById('sel-card-form-' + findingId);
+    if (!form || !engineId) return;
+    var radio = form.querySelector('input[value="' + engineId + '"]');
+    if (radio) {
+      radio.checked = true;
+      if (window._selCardUpdate) window._selCardUpdate(findingId);
+    }
+  };
+  </script>
+  {% endif %}
+
+</div>

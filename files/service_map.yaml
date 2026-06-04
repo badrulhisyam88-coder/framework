@@ -1,0 +1,79 @@
+# Nmap fingerprint → CVE vendor/product mapping
+# pattern: regex matched against "product version banner" string
+# vendor/product: must match NVD CPE identifiers
+
+mappings:
+  - pattern: "OpenSSH"
+    vendor: "openssh"
+    product: "openssh"
+    version_pattern: "(\\d+\\.\\d+)"
+
+  - pattern: "nginx"
+    vendor: "nginx"
+    product: "nginx"
+    version_pattern: "(\\d+\\.\\d+\\.\\d+)"
+
+  - pattern: "Apache(?:\\s+httpd)?"
+    vendor: "apache"
+    product: "apache_http_server"
+    version_pattern: "(\\d+\\.\\d+\\.\\d+)"
+
+  - pattern: "Microsoft IIS"
+    vendor: "microsoft"
+    product: "internet_information_services"
+    version_pattern: "(\\d+\\.\\d+)"
+
+  - pattern: "vsftpd"
+    vendor: "vsftpd_project"
+    product: "vsftpd"
+    version_pattern: "(\\d+\\.\\d+\\.\\d+)"
+
+  - pattern: "ProFTPD"
+    vendor: "proftpd"
+    product: "proftpd"
+    version_pattern: "(\\d+\\.\\d+\\.\\d+)"
+
+  - pattern: "OpenSSL"
+    vendor: "openssl"
+    product: "openssl"
+    version_pattern: "(\\d+\\.\\d+\\.\\d+)"
+
+  - pattern: "MySQL"
+    vendor: "mysql"
+    product: "mysql"
+    version_pattern: "(\\d+\\.\\d+\\.\\d+)"
+
+  - pattern: "PostgreSQL"
+    vendor: "postgresql"
+    product: "postgresql"
+    version_pattern: "(\\d+\\.\\d+)"
+
+  - pattern: "Microsoft SQL Server"
+    vendor: "microsoft"
+    product: "sql_server"
+    version_pattern: "(\\d+\\.\\d+)"
+
+  - pattern: "Samba"
+    vendor: "samba"
+    product: "samba"
+    version_pattern: "(\\d+\\.\\d+\\.\\d+)"
+
+  - pattern: "OpenVPN"
+    vendor: "openvpn"
+    product: "openvpn"
+    version_pattern: "(\\d+\\.\\d+\\.\\d+)"
+
+  - pattern: "Dovecot"
+    vendor: "dovecot"
+    product: "dovecot"
+    version_pattern: "(\\d+\\.\\d+\\.\\d+)"
+
+  - pattern: "Postfix"
+    vendor: "postfix"
+    product: "postfix"
+    version_pattern: "(\\d+\\.\\d+\\.\\d+)"
+
+  - pattern: "Exim"
+    vendor: "exim"
+    product: "exim"
+    version_pattern: "(\\d+\\.\\d+)"

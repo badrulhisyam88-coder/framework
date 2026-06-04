@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+{% block title %}Discovery — AI Assist Tool{% endblock %}
+{% block heading %}Discovery{% endblock %}
+
+{% block actions %}
+<button id="run-scan-btn" class="btn btn-primary" type="button" onclick="startScan()">
+    <span class="scan-label-idle">Run Scan</span>
+    <span class="scan-label-busy"><span class="spinner"></span> Scanning…</span>
+</button>
+{% endblock %}
+
+{% block content %}
+<div class="scan-form" id="scan-form">
+    <div class="form-group">
+        <label class="form-label">Target (IP / CIDR / Hostname)</label>
+        <input class="form-input" name="target" placeholder="192.168.1.0/24" required>
+    </div>
+    <div class="form-group" style="max-width:160px">
+        <label class="form-label">Scan Type</label>
+        <select class="form-select" name="scan_type" id="scan-type-select">
+            <option value="quick" selected>Quick</option>
+            <option value="full">Full</option>
+            <option value="custom">Custom</option>
+        </select>
+    </div>
+    <div class="form-group" style="max-width:160px">
+        <label class="form-label">Parallel Workers</label>
+        <input class="form-input" type="number" name="workers" id="workers-input"
+            min="1" max="32" step="1" value="{{ default_workers or 4 }}">
+        <small class="text-muted" style="display:block;margin-top:4px;font-size:11px;">
+            More workers = faster scan, higher CPU load
+        </small>
+    </div>
+</div>
+
+<div id="scan-warning" class="card" style="display:none; border-color: var(--warning, #b58900); margin-top:12px;">
+    <strong>Full scan tests all 65535 ports and may take 30+ minutes.</strong>
+</div>
+
+<div id="scan-progress" style="display:none; margin-top:16px;">
+    <div class="card">
+        <div class="card-title"><span class="spinner"></span> Scan in progress</div>
+        <p id="scan-status" class="mono" style="margin:8px 0;">Starting…</p>
+        <div class="stats-row">
+            <div class="stat-card">
+                <div class="stat-value" id="scan-hosts-up">0</div>
+                <div class="stat-label">Hosts Discovered</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value mono" id="scan-elapsed">0s</div>
+                <div class="stat-label">Elapsed</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="scan-result" style="margin-top:16px;"></div>
+
+<div class="stats-row">
+    <div class="stat-card">
+        <div class="stat-value">{{ hosts|length }}</div>
+        <div class="stat-label">Hosts</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ total_services }}</div>
+        <div class="stat-label">Services</div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-title">Discovered Hosts</div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th style="width:24px;"></th>
+                    <th>Asset Name</th>
+                    <th>IP Address</th>
+                    <th>Hostname</th>
+                    <th>OS Guess</th>
+                    <th>Open Ports</th>
+                    <th>Last Seen</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for host in hosts %}
+                <tr class="expandable-row"
+                    onclick="toggleHostRow('{{ host.id }}', this)"
+                    hx-get="/api/v1/validation/discovery/hosts/{{ host.id }}/services"
+                    hx-trigger="click once"
+                    hx-target="#services-{{ host.id }}"
+                    hx-swap="innerHTML">
+                    <td><span class="expand-icon" id="icon-{{ host.id }}">▶</span></td>
+                    <td class="mono">{{ host.asset_name or "—" }}</td>
+                    <td class="mono">{{ host.ip }}</td>
+                    <td class="text-muted">{{ host.hostname or "—" }}</td>
+                    <td class="text-muted">{{ host.os_guess or "—" }}</td>
+                    <td class="mono">{{ services_per_host.get(host.id, 0) }}</td>
+                    <td class="text-muted mono">{{ host.last_seen.strftime('%Y-%m-%d %H:%M') }}</td>
+                    <td><span class="qstatus qstatus-{{ host.status }}">{{ host.status }}</span></td>
+                </tr>
+                <tr id="row-services-{{ host.id }}" class="sub-row" style="display:none;">
+                    <td colspan="8">
+                        <div id="services-{{ host.id }}">
+                            <div class="sub-table"><span class="text-muted">Loading…</span></div>
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="8" class="empty-state">No hosts discovered yet. Run a scan to begin.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+function toggleHostRow(hostId, rowEl) {
+    var sub = document.getElementById("row-services-" + hostId);
+    var icon = document.getElementById("icon-" + hostId);
+    if (!sub) return;
+    var hidden = sub.style.display === "none";
+    sub.style.display = hidden ? "table-row" : "none";
+    if (icon) { icon.classList.toggle("open", hidden); }
+}
+</script>
+
+<script>
+(function () {
+    var scanSource = null;
+    var scanStart = 0;
+    var elapsedTimer = null;
+
+    function $(id) { return document.getElementById(id); }
+
+    function setBusy(busy) {
+        var btn = $("run-scan-btn");
+        btn.disabled = busy;
+        btn.classList.toggle("is-busy", busy);
+    }
+
+    function cleanup() {
+        if (scanSource) { scanSource.close(); scanSource = null; }
+        if (elapsedTimer) { clearInterval(elapsedTimer); elapsedTimer = null; }
+        setBusy(false);
+    }
+
+    window.startScan = function () {
+        var target = (document.querySelector('[name="target"]').value || "").trim();
+        var scanType = document.querySelector('[name="scan_type"]').value;
+        var workersRaw = parseInt(document.querySelector('[name="workers"]').value, 10);
+        var workers = isNaN(workersRaw) ? 4 : Math.max(1, Math.min(32, workersRaw));
+        if (!target) {
+            alert("Target is required");
+            return;
+        }
+        if (scanSource) { return; }
+
+        $("scan-result").innerHTML = "";
+        $("scan-progress").style.display = "block";
+        $("scan-status").textContent = "Starting…";
+        $("scan-hosts-up").textContent = "0";
+        $("scan-elapsed").textContent = "0s";
+        setBusy(true);
+
+        scanStart = Date.now();
+        elapsedTimer = setInterval(function () {
+            var s = Math.floor((Date.now() - scanStart) / 1000);
+            $("scan-elapsed").textContent = s + "s";
+        }, 1000);
+
+        var url = "/api/v1/validation/discovery/scan-stream"
+            + "?target=" + encodeURIComponent(target)
+            + "&scan_type=" + encodeURIComponent(scanType)
+            + "&workers=" + encodeURIComponent(workers);
+        scanSource = new EventSource(url);
+
+        scanSource.addEventListener("status", function (e) {
+            try { $("scan-status").textContent = JSON.parse(e.data).message || ""; } catch (_) {}
+        });
+
+        scanSource.addEventListener("progress", function (e) {
+            try {
+                var d = JSON.parse(e.data);
+                if (d.message) { $("scan-status").textContent = d.message; }
+                if (typeof d.hosts_up === "number") {
+                    $("scan-hosts-up").textContent = String(d.hosts_up);
+                }
+            } catch (_) {}
+        });
+
+        scanSource.addEventListener("complete", function (e) {
+            try {
+                var d = JSON.parse(e.data);
+                $("scan-progress").style.display = "none";
+                $("scan-result").innerHTML = d.html || "";
+            } catch (_) {}
+            cleanup();
+        });
+
+        scanSource.addEventListener("error", function (e) {
+            var msg = "Scan failed or connection lost";
+            try {
+                if (e.data) { msg = JSON.parse(e.data).message || msg; }
+            } catch (_) {}
+            $("scan-status").textContent = msg;
+            cleanup();
+        });
+    };
+
+    document.addEventListener("DOMContentLoaded", function () {
+        var sel = $("scan-type-select");
+        var warn = $("scan-warning");
+        function syncWarning() {
+            warn.style.display = (sel.value === "full") ? "block" : "none";
+        }
+        sel.addEventListener("change", syncWarning);
+        syncWarning();
+    });
+})();
+</script>
+{% endblock %}

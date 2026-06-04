@@ -1,0 +1,411 @@
+{% extends "base.html" %}
+{% block title %}Assets — AI Assist Tool{% endblock %}
+{% block heading %}Assets{% endblock %}
+
+{% block actions %}
+<button class="btn btn-secondary" type="button" onclick="toggleAddGroupForm()">+ Add DC Group</button>
+{% endblock %}
+
+{% block content %}
+<form id="add-dc-group-form"
+      class="card"
+      style="display:none;"
+      hx-post="/api/v1/validation/assets/dc-groups"
+      hx-target="#dc-group-list"
+      hx-swap="beforeend"
+      hx-on::after-request="if(event.detail.successful){this.reset();this.style.display='none';}">
+    <div class="card-title">Add DC Group</div>
+    <div class="flex gap-3" style="flex-wrap:wrap;align-items:flex-end;">
+        <div class="form-group" style="flex:1;min-width:180px;margin-bottom:0;">
+            <label class="form-label">Name</label>
+            <input class="form-input" name="name" required placeholder="KL DC">
+        </div>
+        <div class="form-group" style="max-width:160px;margin-bottom:0;">
+            <label class="form-label">Location</label>
+            <select class="form-select" name="location">
+                {% for loc in locations %}
+                <option value="{{ loc }}">{{ loc }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group" style="flex:2;min-width:200px;margin-bottom:0;">
+            <label class="form-label">Notes</label>
+            <input class="form-input" name="notes" placeholder="optional">
+        </div>
+        <div class="flex gap-2">
+            <button type="submit" class="btn btn-primary">Save</button>
+            <button type="button" class="btn btn-secondary" onclick="toggleAddGroupForm()">Cancel</button>
+        </div>
+    </div>
+</form>
+
+<div id="dc-group-list">
+    {% for g in groups %}
+        {% include "partials/dc_group_card.html" %}
+    {% else %}
+        <div class="empty-state">
+            No DC groups yet. Click <strong>+ Add DC Group</strong> to create one.
+        </div>
+    {% endfor %}
+</div>
+
+<script>
+function toggleAddGroupForm() {
+    var f = document.getElementById("add-dc-group-form");
+    f.style.display = (f.style.display === "none" || !f.style.display) ? "block" : "none";
+}
+
+function toggleDcGroup(groupId) {
+    var body = document.getElementById("dc-body-" + groupId);
+    var icon = document.getElementById("dc-icon-" + groupId);
+    if (!body) return;
+    var open = body.style.display === "none" || !body.style.display;
+    body.style.display = open ? "block" : "none";
+    if (icon) icon.classList.toggle("open", open);
+}
+
+function toggleAddAssetForm(groupId) {
+    var f = document.getElementById("add-asset-form-" + groupId);
+    if (!f) return;
+    f.style.display = (f.style.display === "none" || !f.style.display) ? "block" : "none";
+}
+
+function toggleAssetDetails(assetId) {
+    var box = document.getElementById("asset-details-" + assetId);
+    var icon = document.getElementById("asset-icon-" + assetId);
+    if (!box) return;
+    var open = box.style.display === "none" || !box.style.display;
+    box.style.display = open ? "block" : "none";
+    if (icon) icon.classList.toggle("open", open);
+    if (open && !box.dataset.loaded) {
+        window.htmx.ajax("GET",
+            "/api/v1/validation/assets/" + assetId + "/details",
+            { target: box, swap: "innerHTML" });
+        box.dataset.loaded = "1";
+    }
+}
+
+/* Scan All progress (SSE) */
+var _scanAllSources = {};
+
+function _setScanRowState(assetId, state) {
+    var wrap = document.getElementById("asset-wrap-" + assetId);
+    if (!wrap) return;
+    wrap.classList.remove("asset-status-queued", "asset-status-scanning", "asset-status-done");
+    if (state) wrap.classList.add("asset-status-" + state);
+}
+
+function _updateProgress(groupId, current, total, name) {
+    var bar = document.getElementById("scan-progress-" + groupId);
+    if (!bar) return;
+    bar.classList.remove("hidden");
+    bar.querySelector(".current").textContent = current;
+    bar.querySelector(".total").textContent = total;
+    bar.querySelector(".current-name").textContent = name || "—";
+    var pct = total > 0 ? Math.round((current / total) * 100) : 0;
+    bar.querySelector(".progress-bar-fill").style.width = pct + "%";
+}
+
+function _showScanComplete(groupId, total) {
+    var bar = document.getElementById("scan-progress-" + groupId);
+    if (!bar) return;
+    bar.querySelector(".progress-label").innerHTML =
+        "Scan complete — <strong>" + total + "/" + total + "</strong> asset(s) scanned";
+    bar.querySelector(".progress-bar-fill").style.width = "100%";
+    setTimeout(function () { bar.classList.add("hidden"); }, 4000);
+}
+
+function startScanAll(groupId, assetCount, groupName) {
+    if (assetCount === 0) {
+        alert("No assets in " + groupName + " to scan.");
+        return;
+    }
+    if (_scanAllSources[groupId]) {
+        alert("A scan is already running for this DC group.");
+        return;
+    }
+    if (!confirm("Scan all " + assetCount + " asset(s) in " + groupName +
+                 "? This runs sequentially and may take several minutes.")) {
+        return;
+    }
+
+    var btn = document.getElementById("scan-all-btn-" + groupId);
+    if (btn) { btn.disabled = true; btn.classList.add("htmx-request"); }
+
+    // Mark every asset in this group as queued.
+    var list = document.getElementById("asset-list-" + groupId);
+    if (list) {
+        list.querySelectorAll(".asset-row-wrap").forEach(function (w) {
+            w.classList.remove("asset-status-done", "asset-status-scanning");
+            w.classList.add("asset-status-queued");
+        });
+    }
+    _updateProgress(groupId, 0, assetCount, "starting…");
+
+    var url = "/api/v1/validation/assets/dc-groups/" + groupId + "/scan-all-stream";
+    var es = new EventSource(url);
+    _scanAllSources[groupId] = es;
+
+    function cleanup() {
+        es.close();
+        delete _scanAllSources[groupId];
+        if (btn) { btn.disabled = false; btn.classList.remove("htmx-request"); }
+    }
+
+    es.onmessage = function (e) {
+        var d;
+        try { d = JSON.parse(e.data); } catch (_) { return; }
+        switch (d.event) {
+            case "start":
+                _updateProgress(groupId, 0, d.total, "starting…");
+                break;
+            case "asset-start":
+                _setScanRowState(d.asset_id, "scanning");
+                _updateProgress(groupId, d.current - 1, d.total, d.name);
+                break;
+            case "asset-complete":
+                var wrap = document.getElementById("asset-wrap-" + d.asset_id);
+                if (wrap && d.html) {
+                    wrap.outerHTML = d.html;
+                    var fresh = document.getElementById("asset-wrap-" + d.asset_id);
+                    if (fresh) {
+                        window.htmx.process(fresh);
+                        fresh.classList.add("asset-status-done");
+                    }
+                }
+                _updateProgress(groupId, d.current, d.total, d.name);
+                break;
+            case "asset-error":
+                _setScanRowState(d.asset_id, null);
+                _updateProgress(groupId, d.current, d.total, d.name + " (error)");
+                break;
+            case "done":
+                _showScanComplete(groupId, d.total);
+                cleanup();
+                break;
+            case "error":
+                alert("Scan stream error: " + (d.message || "unknown"));
+                cleanup();
+                break;
+        }
+    };
+
+    es.onerror = function () {
+        if (es.readyState === EventSource.CLOSED) return;
+        var bar = document.getElementById("scan-progress-" + groupId);
+        if (bar) bar.querySelector(".progress-label").textContent =
+            "Connection lost — scan may still be running on the server.";
+        cleanup();
+    };
+}
+
+/* Scan-discovered (recon → nmap) progress bar inside the asset details panel */
+var _scanDiscoveredSources = {};
+
+function startScanDiscovered(assetId, targetCount) {
+    if (!targetCount) {
+        alert("No discovered hosts to scan.");
+        return;
+    }
+    if (_scanDiscoveredSources[assetId]) {
+        alert("A scan-discovered run is already in progress for this asset.");
+        return;
+    }
+    if (!confirm("Run an Nmap scan against all " + targetCount +
+                 " discovered host(s)? Sequential, may take several minutes.")) {
+        return;
+    }
+    var btn = document.getElementById("scan-discovered-btn-" + assetId);
+    if (btn) { btn.disabled = true; btn.classList.add("htmx-request"); }
+    var bar = document.getElementById("scan-discovered-progress-" + assetId);
+    if (bar) {
+        bar.classList.remove("hidden");
+        bar.querySelector(".current").textContent = "0";
+        bar.querySelector(".total").textContent = String(targetCount);
+        bar.querySelector(".current-name").textContent = "starting…";
+        bar.querySelector(".progress-bar-fill").style.width = "0%";
+    }
+
+    var url = "/api/v1/validation/assets/" + assetId + "/recon/scan-discovered-stream";
+    var es = new EventSource(url);
+    _scanDiscoveredSources[assetId] = es;
+
+    function cleanup() {
+        es.close();
+        delete _scanDiscoveredSources[assetId];
+        if (btn) { btn.disabled = false; btn.classList.remove("htmx-request"); }
+    }
+
+    function setProgress(current, total, name) {
+        if (!bar) return;
+        bar.querySelector(".current").textContent = String(current);
+        bar.querySelector(".total").textContent = String(total);
+        bar.querySelector(".current-name").textContent = name || "—";
+        var pct = total > 0 ? Math.round((current / total) * 100) : 0;
+        bar.querySelector(".progress-bar-fill").style.width = pct + "%";
+    }
+
+    es.onmessage = function (e) {
+        var d;
+        try { d = JSON.parse(e.data); } catch (_) { return; }
+        switch (d.event) {
+            case "start":
+                setProgress(0, d.total, "starting…");
+                break;
+            case "target-start":
+                setProgress(d.current - 1, d.total, d.target);
+                break;
+            case "target-complete":
+                setProgress(d.current, d.total,
+                    d.target + " — " + d.hosts + " host(s), " + d.services + " service(s)");
+                break;
+            case "target-error":
+                setProgress(d.current, d.total, d.target + " (error: " + (d.error || "?") + ")");
+                break;
+            case "done":
+                if (bar) {
+                    bar.querySelector(".progress-label").innerHTML =
+                        "Scan complete — <strong>" + d.total + "/" + d.total +
+                        "</strong> target(s) scanned. Reloading details…";
+                    bar.querySelector(".progress-bar-fill").style.width = "100%";
+                }
+                // Refresh the inline details so the new hosts/findings show up.
+                var box = document.getElementById("asset-details-" + assetId);
+                if (box) {
+                    box.dataset.loaded = "";
+                    window.htmx.ajax("GET",
+                        "/api/v1/validation/assets/" + assetId + "/details",
+                        { target: box, swap: "innerHTML" });
+                    box.dataset.loaded = "1";
+                }
+                cleanup();
+                break;
+            case "error":
+                alert("Scan stream error: " + (d.message || "unknown"));
+                cleanup();
+                break;
+        }
+    };
+
+    es.onerror = function () {
+        if (es.readyState === EventSource.CLOSED) return;
+        if (bar) bar.querySelector(".progress-label").textContent =
+            "Connection lost — scan may still be running on the server.";
+        cleanup();
+    };
+}
+
+/* Export Options modal — shared by per-asset and per-DC-group Export buttons */
+function openExportPanel(scope, id, name) {
+    var safeName = (name || "").replace(/[<>]/g, "");
+    var titleDefault = safeName + " — Security Report";
+    var html =
+        '<div class="modal-dialog" role="dialog">' +
+          '<div class="modal-title">Export Report</div>' +
+          '<div class="modal-subtitle">' +
+            (scope === "dc-group" ? "DC group: " : "Asset: ") +
+            '<strong>' + safeName + '</strong>' +
+          '</div>' +
+          '<form id="export-options-form" onsubmit="return submitExportPanel(event)">' +
+            '<input type="hidden" name="scope" value="' + scope + '">' +
+            '<input type="hidden" name="id" value="' + id + '">' +
+            '<input type="hidden" name="name" value="' + safeName + '">' +
+            '<div class="form-group">' +
+              '<label class="form-label">Title</label>' +
+              '<input class="form-input" name="title" value="' + titleDefault + '">' +
+            '</div>' +
+            '<div class="form-group">' +
+              '<label class="form-label">Prepared by</label>' +
+              '<input class="form-input" name="prepared_by" placeholder="optional">' +
+            '</div>' +
+            '<div class="form-group">' +
+              '<label class="form-label">Severity filter</label>' +
+              '<select class="form-select" name="severity_filter">' +
+                '<option value="all" selected>All severities</option>' +
+                '<option value="high_above">High + Critical only</option>' +
+                '<option value="critical_only">Critical only</option>' +
+              '</select>' +
+            '</div>' +
+            '<div class="form-group">' +
+              '<label class="form-label">Sections to include</label>' +
+              '<div class="section-list">' +
+                '<label><input type="checkbox" name="section" value="executive" checked> Executive Summary</label>' +
+                '<label><input type="checkbox" name="section" value="findings" checked> Findings Detail</label>' +
+                '<label><input type="checkbox" name="section" value="resolved" checked> Resolved Findings</label>' +
+                '<label><input type="checkbox" name="section" value="metadata"> Scan Metadata</label>' +
+              '</div>' +
+            '</div>' +
+            '<div class="modal-actions">' +
+              '<button type="button" class="btn btn-secondary" onclick="closeExportPanel()">Cancel</button>' +
+              '<button type="submit" id="export-submit-btn" class="btn btn-primary">↓ Generate PDF</button>' +
+            '</div>' +
+          '</form>' +
+        '</div>';
+    var container = document.getElementById("modal-container");
+    var overlay = document.getElementById("modal-overlay");
+    container.innerHTML = html;
+    overlay.classList.remove("hidden");
+    overlay.onclick = closeExportPanel;
+}
+
+function closeExportPanel() {
+    var container = document.getElementById("modal-container");
+    var overlay = document.getElementById("modal-overlay");
+    container.innerHTML = "";
+    overlay.classList.add("hidden");
+    overlay.onclick = null;
+}
+
+function submitExportPanel(ev) {
+    ev.preventDefault();
+    var form = ev.target;
+    var scope = form.scope.value;
+    var id = form.id.value;
+    var name = form.name.value;
+    var title = (form.title.value || "").trim();
+    var preparedBy = (form.prepared_by.value || "").trim();
+    var severity = form.severity_filter.value;
+    var sections = Array.from(form.querySelectorAll('input[name="section"]:checked'))
+        .map(function (cb) { return cb.value; });
+    if (sections.length === 0) {
+        alert("Pick at least one section.");
+        return false;
+    }
+    var qs = new URLSearchParams();
+    if (preparedBy) qs.set("prepared_by", preparedBy);
+    qs.set("severity_filter", severity);
+    qs.set("sections", sections.join(","));
+    if (title) qs.set("title", title);
+
+    var base = scope === "dc-group"
+        ? "/api/v1/validation/reports/generate/dc-group/"
+        : "/api/v1/validation/reports/generate/asset/";
+    var url = base + encodeURIComponent(id) + "?" + qs.toString();
+
+    var btn = document.getElementById("export-submit-btn");
+    if (btn) { btn.disabled = true; btn.textContent = "Generating…"; }
+
+    fetch(url, { method: "POST" }).then(function (resp) {
+        if (!resp.ok) return resp.text().then(function (t) { throw new Error(t || resp.statusText); });
+        return resp.blob();
+    }).then(function (blob) {
+        var stamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+        var fname = (name || "report").replace(/[^A-Za-z0-9._-]/g, "_") +
+            (scope === "dc-group" ? "_security_report_" : "_report_") + stamp + ".pdf";
+        var objUrl = window.URL.createObjectURL(blob);
+        var a = document.createElement("a");
+        a.href = objUrl;
+        a.download = fname;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(objUrl);
+        closeExportPanel();
+    }).catch(function (err) {
+        alert("Export failed: " + err.message);
+        if (btn) { btn.disabled = false; btn.textContent = "↓ Generate PDF"; }
+    });
+    return false;
+}
+</script>
+{% endblock %}

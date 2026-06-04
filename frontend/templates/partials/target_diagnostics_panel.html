@@ -1,0 +1,191 @@
+{#
+  Partial: target_diagnostics_panel.html
+  Context: investigation_id, target_ctx (TargetContext | None)
+  Loaded inline inside the scan orchestration panel.
+  Also available as a standalone HTMX target via the "Check Target" button.
+#}
+{% if target_ctx %}
+<div class="td-panel" id="td-diagnostics-panel">
+  <div class="td-header">
+    <span class="td-title">Target Resolution</span>
+    <button class="btn btn-secondary btn-sm td-refresh-btn"
+            type="button"
+            onclick="soRunDiagnostics()">
+      ⟳ Check Connectivity
+    </button>
+  </div>
+
+  <div class="td-grid">
+    {# Display URL #}
+    <div class="td-row">
+      <span class="td-label">Display URL</span>
+      <span class="td-value mono">{{ target_ctx.display_url }}</span>
+    </div>
+
+    {# Scanner URL — highlight if different from display #}
+    <div class="td-row">
+      <span class="td-label">Scanner URL</span>
+      <span class="td-value mono
+        {%- if target_ctx.scanner_url != target_ctx.display_url %} td-value--resolved{% endif %}">
+        {{ target_ctx.scanner_url }}
+        {% if target_ctx.scanner_url != target_ctx.display_url %}
+          <span class="td-badge td-badge--info">translated</span>
+        {% endif %}
+      </span>
+    </div>
+
+    {# Resolution strategy #}
+    <div class="td-row">
+      <span class="td-label">Strategy</span>
+      <span class="td-value">
+        {% if target_ctx.resolution_strategy == 'docker_host_internal' %}
+          <span class="td-badge td-badge--docker">Docker host routing</span>
+          <span class="td-note">localhost → host.docker.internal</span>
+        {% else %}
+          <span class="td-badge td-badge--direct">Direct</span>
+          <span class="td-note">No translation needed</span>
+        {% endif %}
+      </span>
+    </div>
+
+    {# Reachability #}
+    {% if target_ctx.reachable is not none %}
+      <div class="td-row">
+        <span class="td-label">Reachable</span>
+        <span class="td-value">
+          {% if target_ctx.reachable %}
+            <span class="td-badge td-badge--ok">✓ Yes</span>
+            {% if target_ctx.latency_ms %}
+              <span class="td-note">{{ target_ctx.latency_ms }}ms</span>
+            {% endif %}
+          {% else %}
+            <span class="td-badge td-badge--err">✕ Unreachable</span>
+            {% set tcp_err = target_ctx.diagnostics.get('tcp', {}).get('error', '') %}
+            {% set http_err = target_ctx.diagnostics.get('http', {}).get('error', '') %}
+            {% if tcp_err or http_err %}
+              <span class="td-note td-note--err">
+                {{ tcp_err or http_err | truncate(80) }}
+              </span>
+            {% endif %}
+          {% endif %}
+        </span>
+      </div>
+    {% endif %}
+
+    {# HTTP status #}
+    {% if target_ctx.http_status %}
+      <div class="td-row">
+        <span class="td-label">HTTP Status</span>
+        <span class="td-value">
+          <span class="td-badge
+            {%- if target_ctx.http_status < 300 %} td-badge--ok
+            {%- elif target_ctx.http_status < 400 %} td-badge--warn
+            {%- else %} td-badge--err{% endif %}">
+            {{ target_ctx.http_status }}
+          </span>
+        </span>
+      </div>
+    {% endif %}
+
+    {# Fingerprint #}
+    {% if target_ctx.fingerprint %}
+      <div class="td-row">
+        <span class="td-label">Identified As</span>
+        <span class="td-value">
+          <span class="td-badge
+            {%- if target_ctx.fingerprint_confidence == 'high' %} td-badge--ok
+            {%- elif target_ctx.fingerprint_confidence == 'medium' %} td-badge--info
+            {%- else %} td-badge--muted{% endif %}">
+            {{ target_ctx.fingerprint }}
+          </span>
+          <span class="td-note">{{ target_ctx.fingerprint_confidence }} confidence</span>
+        </span>
+      </div>
+    {% endif %}
+
+    {# Server header #}
+    {% if target_ctx.server_header %}
+      <div class="td-row">
+        <span class="td-label">Server</span>
+        <span class="td-value mono">{{ target_ctx.server_header }}</span>
+      </div>
+    {% endif %}
+
+    {# Page title #}
+    {% if target_ctx.page_title %}
+      <div class="td-row">
+        <span class="td-label">Page Title</span>
+        <span class="td-value">{{ target_ctx.page_title | truncate(80) }}</span>
+      </div>
+    {% endif %}
+
+    {# Environment #}
+    <div class="td-row">
+      <span class="td-label">Environment</span>
+      <span class="td-value mono">{{ target_ctx.environment_type }}</span>
+    </div>
+
+    {% if target_ctx.last_checked %}
+      <div class="td-row">
+        <span class="td-label">Last Checked</span>
+        <span class="td-value td-note">
+          {{ target_ctx.last_checked | string | truncate(19, killwords=True, end='') }} UTC
+        </span>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% else %}
+<div class="td-panel td-panel--empty" id="td-diagnostics-panel">
+  <div class="td-header">
+    <span class="td-title">Target Diagnostics</span>
+    <button class="btn btn-secondary btn-sm"
+            type="button"
+            onclick="soRunDiagnostics()">
+      ⟳ Check Connectivity
+    </button>
+  </div>
+  <span style="font-size:.75rem;color:var(--text-muted);">
+    Enter a target above then click Check Connectivity.
+  </span>
+</div>
+{% endif %}
+
+<style>
+.td-panel {
+  background: color-mix(in srgb, var(--accent) 3%, var(--bg-raised));
+  border: 1px solid var(--border); border-radius: 5px;
+  padding: .6rem .8rem; margin-top: .65rem;
+}
+.td-panel--empty { padding: .4rem .8rem; }
+.td-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: .45rem; flex-wrap: wrap; gap: .3rem;
+}
+.td-title {
+  font-size: .68rem; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--text-muted); font-weight: 600;
+}
+.td-grid  { display: flex; flex-direction: column; gap: .25rem; }
+.td-row   { display: flex; align-items: baseline; gap: .5rem; flex-wrap: wrap; }
+.td-label {
+  font-size: .68rem; color: var(--text-muted); min-width: 6rem;
+  flex-shrink: 0; text-align: right;
+}
+.td-value { font-size: .75rem; display: flex; align-items: center; gap: .35rem; flex-wrap: wrap; }
+.td-value--resolved { color: var(--accent); }
+.td-note  { font-size: .68rem; color: var(--text-muted); }
+.td-note--err { color: var(--critical); }
+
+.td-badge {
+  font-size: .65rem; border-radius: 3px; padding: 1px 5px;
+  font-family: var(--mono); font-weight: 600; white-space: nowrap;
+}
+.td-badge--ok     { background: color-mix(in srgb, var(--low) 20%, transparent); color: var(--low); }
+.td-badge--err    { background: color-mix(in srgb, var(--critical) 20%, transparent); color: var(--critical); }
+.td-badge--warn   { background: color-mix(in srgb, var(--medium) 20%, transparent); color: var(--medium); }
+.td-badge--info   { background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--accent); }
+.td-badge--docker { background: color-mix(in srgb, var(--accent) 25%, transparent); color: var(--accent); border: 1px solid var(--accent); }
+.td-badge--direct { background: color-mix(in srgb, var(--text-muted) 15%, transparent); color: var(--text-muted); }
+.td-badge--muted  { background: color-mix(in srgb, var(--text-muted) 15%, transparent); color: var(--text-muted); }
+</style>

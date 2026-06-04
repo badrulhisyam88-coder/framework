@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Validation Queue — AI Assist Tool{% endblock %}
+{% block heading %}Validation Queue{% endblock %}
+
+{% block content %}
+<div class="stats-row">
+    <div class="stat-card"><div class="stat-value">{{ counts.get('pending', 0) }}</div><div class="stat-label">Pending</div></div>
+    <div class="stat-card"><div class="stat-value">{{ counts.get('approved', 0) }}</div><div class="stat-label">Approved</div></div>
+    <div class="stat-card"><div class="stat-value">{{ counts.get('completed', 0) }}</div><div class="stat-label">Completed</div></div>
+    <div class="stat-card"><div class="stat-value">{{ counts.get('rejected', 0) }}</div><div class="stat-label">Rejected</div></div>
+</div>
+
+<div class="card">
+    <div class="card-title">Queue Items</div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Target</th>
+                    <th>Port</th>
+                    <th>Service</th>
+                    <th>CVE</th>
+                    <th>Validation</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="queue-table-body">
+                {% for item in items %}
+                {% include "partials/queue_row.html" %}
+                {% else %}
+                <tr><td colspan="8" class="empty-state">Queue is empty. Run a scan to populate it.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

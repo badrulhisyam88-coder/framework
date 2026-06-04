@@ -1,0 +1,61 @@
+{#
+  Partial: evidence_capture_success.html
+  Replaces the capture form after a successful submission. Confirms what was
+  captured and offers an immediate next-step nudge.
+#}
+<div class="capture-success-card">
+  <div class="capture-success-header">
+    <span class="capture-success-icon">✓</span>
+    <span class="capture-success-title">Evidence captured</span>
+    <span class="capture-success-type mono">{{ artifact.type_label }}</span>
+  </div>
+  <div class="capture-success-body">
+    <div class="capture-success-line">{{ artifact.title }}</div>
+    {% if artifact.description %}
+    <div class="capture-success-desc">{{ artifact.description }}</div>
+    {% endif %}
+    {% if action_id %}
+    <div class="capture-success-note">
+      Linked to your investigation step — the action is now marked complete.
+    </div>
+    {% endif %}
+  </div>
+  <div class="capture-success-actions">
+    {% if action_id %}
+    <a class="btn btn-sm btn-secondary"
+       hx-get="/api/v1/validation/workspace/investigations/{{ investigation_id }}/feed/partial"
+       hx-target="closest .ws-content,#workspace-content"
+       hx-swap="innerHTML">Refresh feed</a>
+    {% endif %}
+    <button class="btn btn-sm btn-secondary" type="button"
+            onclick="this.closest('.capture-success-card').remove()">Dismiss</button>
+  </div>
+</div>
+
+<style>
+.capture-success-card {
+  flex: 1 1 100%;
+  margin-top: .35rem;
+  padding: .55rem .75rem;
+  background: color-mix(in srgb, var(--low) 8%, var(--bg-raised));
+  border: 1px solid color-mix(in srgb, var(--low) 30%, var(--border));
+  border-left: 3px solid var(--low);
+  border-radius: 4px;
+}
+.capture-success-header {
+  display: flex; align-items: baseline; gap: .4rem; margin-bottom: .25rem;
+}
+.capture-success-icon { color: var(--low); font-size: .9rem; }
+.capture-success-title { font-size: .77rem; font-weight: 600; flex: 1; color: var(--low); }
+.capture-success-type {
+  font-size: .6rem; color: var(--text-muted); text-transform: uppercase;
+  letter-spacing: .05em; padding: 1px 5px;
+  background: var(--bg-raised); border: 1px solid var(--border); border-radius: 3px;
+}
+.capture-success-body { padding-left: 1.4rem; }
+.capture-success-line { font-size: .72rem; color: var(--text-primary); }
+.capture-success-desc { font-size: .68rem; color: var(--text-secondary); margin-top: .15rem; }
+.capture-success-note { font-size: .67rem; color: var(--text-muted); margin-top: .2rem; font-style: italic; }
+.capture-success-actions { display: flex; gap: .3rem; margin-top: .4rem; padding-left: 1.4rem; }
+.capture-success-actions .btn-sm { font-size: .68rem; padding: 2px 8px; }
+</style>

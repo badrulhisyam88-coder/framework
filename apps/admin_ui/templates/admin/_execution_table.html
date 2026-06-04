@@ -1,0 +1,51 @@
+<h2>Engine Roster</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Engine ID</th>
+      <th>Phases</th>
+      <th>Finding Types</th>
+      <th>Resource Cost</th>
+      <th>Status</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for engine in engines %}
+    <tr>
+      <td>{{ engine.engine_id }}</td>
+      <td>{{ engine.phases | join(", ") }}</td>
+      <td>{{ engine.finding_types | join(", ") }}</td>
+      <td>{{ engine.resource_cost }}</td>
+      <td class="health health-{{ engine.health_status }}">{{ engine.health_status }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h2>Running Engines</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Investigation ID</th>
+      <th>Engine ID</th>
+      <th>Started At</th>
+      <th>Last Heartbeat</th>
+      <th>Dispatch Type</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for instance in running_engines %}
+    <tr>
+      <td>{{ instance.investigation_id }}</td>
+      <td>{{ instance.engine_id }}</td>
+      <td>{{ instance.started_at_iso }}</td>
+      <td>{{ instance.last_heartbeat_iso }}</td>
+      <td>{{ instance.dispatch_type }}</td>
+    </tr>
+    {% endfor %}
+    {% if not running_engines %}
+    <tr><td colspan="5">No engines currently running.</td></tr>
+    {% endif %}
+  </tbody>
+</table>
+<p class="last-updated">Last updated: {{ now_iso }}</p>

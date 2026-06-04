@@ -1,0 +1,302 @@
+{% extends "base.html" %}
+{% block title %}Custom Report — AI Assist Tool{% endblock %}
+{% block heading %}Custom Report{% endblock %}
+
+{% block actions %}
+<button id="run-cr-btn" class="btn btn-primary" type="button" onclick="startCustomReport()">
+    <span class="scan-label-idle">Run Scan</span>
+    <span class="scan-label-busy"><span class="spinner"></span> Scanning…</span>
+</button>
+<button id="cr-pdf-btn" class="btn btn-secondary" type="button" onclick="downloadPDF()" disabled>
+    Generate PDF Report
+</button>
+{% endblock %}
+
+{% block content %}
+<div class="scan-form" id="cr-form">
+    <div class="form-group">
+        <label class="form-label">CVE / Issue</label>
+        <select class="form-select" name="cve_id" id="cr-cve">
+            {% for c in known_cves %}
+            <option value="{{ c.cve_id }}">{{ c.cve_id }} — {{ c.title }} ({{ c.severity }})</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="form-group">
+        <label class="form-label">IP Range (CIDR or comma-separated)</label>
+        <input class="form-input" name="ip_range" id="cr-range" placeholder="192.168.200.0/24" required>
+    </div>
+    <div class="form-group" style="max-width:200px">
+        <label class="form-label">Ports</label>
+        <input class="form-input" name="ports" id="cr-ports" value="{{ default_ports }}">
+    </div>
+    <div class="form-group" style="max-width:140px">
+        <label class="form-label">Workers</label>
+        <input class="form-input" type="number" name="workers" id="cr-workers" min="1" max="32" value="16">
+    </div>
+    <div class="form-group">
+        <label class="form-label">Prepared by (PDF)</label>
+        <input class="form-input" name="prepared_by" id="cr-prepared-by" placeholder="Your name (optional)">
+    </div>
+</div>
+
+<div class="card" style="margin-top:12px; border-left: 3px solid var(--warning, #b58900);">
+    <strong>Limitations of remote scanning</strong>
+    <ul style="margin:6px 0 0 18px; line-height:1.5;">
+        <li>The Server-header version can be misleading. To confirm a "vulnerable" hit on the host, interrogate the actual running binary:
+            <ul style="margin:4px 0 0 18px;">
+                <li><code>ps -ef | grep '[n]ginx: master'</code> — find the master pid</li>
+                <li><code>readlink /proc/&lt;pid&gt;/exe</code> — resolve the real binary path (works for OS packages, Docker, embedded, source builds)</li>
+                <li><code>&lt;path&gt; -V 2&gt;&amp;1</code> — exact version and build flags</li>
+            </ul>
+        </li>
+        <li>For nginx bundled inside a Java appliance, vendor product, or Docker image, <code>rpm</code>/<code>apt</code> will not show it — check the vendor's security advisory for patch status, since the vendor controls the binary. The <strong>Backend</strong> column hints at which path to take.</li>
+        <li>Distros backport security fixes without bumping the version string, so <code>nginx -v</code> alone may understate patch status. <code>rpm -q --changelog nginx</code> (Rocky/RHEL) or <code>apt-cache policy nginx</code> (Debian) shows the package patch level for OS-managed installs.</li>
+        <li>If <code>server_tokens off</code> or a CDN/WAF strips headers, the version will be unknown from this scan.</li>
+        <li>Some CVEs require a specific config trigger (e.g., CVE-2026-42945 needs a particular <code>rewrite</code> pattern). Status here is "potentially vulnerable", not "exploitable".</li>
+        <li>Hosts with no open ports are silently skipped — they don't appear in the results table.</li>
+    </ul>
+</div>
+
+<div id="cr-progress" style="display:none; margin-top:16px;">
+    <div class="card">
+        <div class="card-title"><span class="spinner"></span> Scan in progress</div>
+        <p id="cr-status" class="mono" style="margin:8px 0;">Starting…</p>
+        <div class="stats-row">
+            <div class="stat-card">
+                <div class="stat-value"><span id="cr-checked">0</span> / <span id="cr-total">0</span></div>
+                <div class="stat-label">IPs Checked</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="cr-alive">0</div>
+                <div class="stat-label">Alive</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="cr-unreachable">0</div>
+                <div class="stat-label">Unreachable</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="cr-vuln" style="color:var(--critical)">0</div>
+                <div class="stat-label">Vulnerable</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="cr-safe" style="color:var(--low)">0</div>
+                <div class="stat-label">Safe</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card" style="margin-top:16px;">
+    <div class="card-title">Results <span class="text-muted" style="font-weight:400; font-size:12px;">(one row per alive host)</span></div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>IP</th>
+                    <th>Status</th>
+                    <th>Open Ports</th>
+                    <th>Server Header</th>
+                    <th>Version</th>
+                    <th>Backend</th>
+                    <th>Notes</th>
+                </tr>
+            </thead>
+            <tbody id="cr-results">
+                <tr><td colspan="7" class="empty-state">No scan run yet.</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+(function () {
+    var src = null;
+    var rows = [];
+    var counts = { checked: 0, total: 0, alive: 0, unreachable: 0, vulnerable: 0, safe: 0,
+                   unknown_version: 0, not_applicable: 0 };
+    var lastSummary = null;
+    var currentCve = "";
+    var currentRange = "";
+    var currentPorts = "";
+
+    function $(id) { return document.getElementById(id); }
+    function setBusy(b) {
+        var btn = $("run-cr-btn");
+        btn.disabled = b;
+        btn.classList.toggle("is-busy", b);
+    }
+    function reset() {
+        rows = [];
+        counts = { checked: 0, total: 0, alive: 0, unreachable: 0, vulnerable: 0, safe: 0,
+                   unknown_version: 0, not_applicable: 0 };
+        lastSummary = null;
+        $("cr-checked").textContent = "0";
+        $("cr-total").textContent = "0";
+        $("cr-alive").textContent = "0";
+        $("cr-unreachable").textContent = "0";
+        $("cr-vuln").textContent = "0";
+        $("cr-safe").textContent = "0";
+        $("cr-results").innerHTML = '<tr><td colspan="7" class="empty-state">Scanning…</td></tr>';
+        $("cr-pdf-btn").disabled = true;
+    }
+    function statusBadge(s) {
+        var color = "var(--text-muted)";
+        if (s === "vulnerable") color = "var(--critical)";
+        else if (s === "safe") color = "var(--low)";
+        else if (s === "unknown_version") color = "var(--matched, #b58900)";
+        else if (s === "not_applicable") color = "var(--text-secondary)";
+        return '<span class="qstatus" style="color:' + color + '">' + s + '</span>';
+    }
+    function backendBadge(b) {
+        if (!b || b === "unknown") {
+            return '<span class="text-muted">unknown</span>';
+        }
+        return '<span class="mono">' + escapeHtml(b) + '</span>';
+    }
+    function escapeHtml(s) {
+        return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+            return ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" })[c];
+        });
+    }
+    function applyCounts(d) {
+        if (typeof d.checked === "number") counts.checked = d.checked;
+        if (typeof d.total === "number") counts.total = d.total;
+        if (typeof d.alive === "number") counts.alive = d.alive;
+        if (typeof d.unreachable === "number") counts.unreachable = d.unreachable;
+        $("cr-checked").textContent = counts.checked;
+        $("cr-total").textContent = counts.total;
+        $("cr-alive").textContent = counts.alive;
+        $("cr-unreachable").textContent = counts.unreachable;
+        $("cr-vuln").textContent = counts.vulnerable;
+        $("cr-safe").textContent = counts.safe;
+    }
+    function renderRows() {
+        if (rows.length === 0) {
+            $("cr-results").innerHTML = '<tr><td colspan="7" class="empty-state">No alive hosts found.</td></tr>';
+            return;
+        }
+        var rank = { vulnerable: 0, unknown_version: 1, safe: 2, not_applicable: 3 };
+        var sorted = rows.slice().sort(function (a, b) {
+            var ra = (rank[a.status] || 9), rb = (rank[b.status] || 9);
+            if (ra !== rb) return ra - rb;
+            return a.ip.localeCompare(b.ip, undefined, { numeric: true });
+        });
+        $("cr-results").innerHTML = sorted.map(function (r) {
+            var ports = (r.open_ports || []).join(", ");
+            return '<tr>'
+                + '<td class="mono">' + escapeHtml(r.ip) + '</td>'
+                + '<td>' + statusBadge(r.status) + '</td>'
+                + '<td class="mono">' + escapeHtml(ports) + '</td>'
+                + '<td class="mono">' + escapeHtml(r.server_header) + '</td>'
+                + '<td class="mono">' + escapeHtml(r.detected_version) + '</td>'
+                + '<td>' + backendBadge(r.backend) + '</td>'
+                + '<td class="text-muted">' + escapeHtml(r.notes) + '</td>'
+                + '</tr>';
+        }).join("");
+    }
+    function cleanup() {
+        if (src) { src.close(); src = null; }
+        setBusy(false);
+    }
+
+    window.startCustomReport = function () {
+        if (src) return;
+        var cve = $("cr-cve").value;
+        var range = ($("cr-range").value || "").trim();
+        var ports = ($("cr-ports").value || "").trim();
+        var workers = parseInt($("cr-workers").value, 10) || 16;
+        if (!range) { alert("IP range is required"); return; }
+        currentCve = cve;
+        currentRange = range;
+        currentPorts = ports;
+        reset();
+        $("cr-progress").style.display = "block";
+        setBusy(true);
+
+        var qs = "?cve_id=" + encodeURIComponent(cve)
+            + "&ip_range=" + encodeURIComponent(range)
+            + "&ports=" + encodeURIComponent(ports)
+            + "&workers=" + encodeURIComponent(workers);
+        src = new EventSource("/api/v1/validation/custom-report/scan-stream" + qs);
+
+        src.addEventListener("status", function (e) {
+            try { $("cr-status").textContent = JSON.parse(e.data).message || ""; } catch (_) {}
+        });
+        src.addEventListener("progress", function (e) {
+            try { applyCounts(JSON.parse(e.data)); } catch (_) {}
+        });
+        src.addEventListener("result", function (e) {
+            try {
+                var d = JSON.parse(e.data);
+                var r = d.result;
+                rows.push(r);
+                if (r.status === "vulnerable") counts.vulnerable++;
+                else if (r.status === "safe") counts.safe++;
+                else if (r.status === "unknown_version") counts.unknown_version++;
+                else if (r.status === "not_applicable") counts.not_applicable++;
+                applyCounts(d);
+                renderRows();
+            } catch (_) {}
+        });
+        src.addEventListener("complete", function (e) {
+            try {
+                var s = JSON.parse(e.data).summary;
+                lastSummary = s;
+                $("cr-status").textContent = "Done in " + s.duration_s + "s — "
+                    + s.alive + " alive ("
+                    + s.vulnerable + " vulnerable, "
+                    + s.safe + " safe, "
+                    + s.unknown_version + " unknown, "
+                    + s.not_applicable + " not-applicable), "
+                    + s.unreachable + " unreachable";
+            } catch (_) {}
+            $("cr-pdf-btn").disabled = (rows.length === 0);
+            cleanup();
+        });
+        src.addEventListener("error", function (e) {
+            var msg = "Scan failed or connection lost";
+            try { if (e.data) { msg = JSON.parse(e.data).message || msg; } } catch (_) {}
+            $("cr-status").textContent = msg;
+            cleanup();
+        });
+    };
+
+    window.downloadPDF = function () {
+        if (!rows.length) return;
+        var btn = $("cr-pdf-btn");
+        btn.disabled = true;
+        var prevText = btn.textContent;
+        btn.textContent = "Generating…";
+
+        fetch("/api/v1/validation/custom-report/pdf", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                cve_id: currentCve,
+                ip_range: currentRange,
+                ports: currentPorts,
+                prepared_by: ($("cr-prepared-by").value || "").trim(),
+                results: rows,
+                summary: lastSummary || {},
+            }),
+        }).then(function (r) {
+            if (!r.ok) { throw new Error("PDF generation failed (" + r.status + ")"); }
+            return r.blob();
+        }).then(function (b) {
+            var url = URL.createObjectURL(b);
+            var a = document.createElement("a");
+            var stamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+            a.href = url; a.download = currentCve + "_scan_" + stamp + ".pdf";
+            document.body.appendChild(a); a.click();
+            setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 0);
+        }).catch(function (e) {
+            alert(String(e));
+        }).finally(function () {
+            btn.textContent = prevText;
+            btn.disabled = (rows.length === 0);
+        });
+    };
+})();
+</script>
+{% endblock %}

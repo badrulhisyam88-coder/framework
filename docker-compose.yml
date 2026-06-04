@@ -1,0 +1,36 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: deployment/docker/Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      # Hot reload for development
+      - ./core:/app/core
+      - ./sdk:/app/sdk
+      - ./apps:/app/apps
+      - ./frontend:/app/frontend
+      - ./config:/app/config
+      # Persistent SQLite data
+      - ./data:/app/data
+      # Knowledge vault mount
+      - /home/unctad/projects/conductor-framework/knowledge-vault:/app/knowledge-vault:rw
+    environment:
+      - APP_NAME=conductor-framework
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - LOG_LEVEL=INFO
+      - API_PREFIX=/api/v1
+      - VERSION=0.1.0
+      - TOOL_DB_PATH=/app/data/validation.db
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://localhost:11434}
+      - KNOWLEDGE_VAULT_PATH=/app/knowledge-vault
+    command: uvicorn core.main:app --host 0.0.0.0 --port 8000 --reload
+    restart: "no"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s

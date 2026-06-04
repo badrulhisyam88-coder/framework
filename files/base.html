@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}AI Assist Tool{% endblock %}</title>
+    <script src="/static/js/htmx.min.js"></script>
+    <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body>
+    <div class="layout">
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <span class="logo-icon">⬡</span>
+                    <span class="logo-text">AI Assist</span>
+                </div>
+            </div>
+            <ul class="nav-links">
+                <li><a href="/api/v1/validation/discovery" class="nav-link {% if active == 'discovery' %}active{% endif %}">
+                    <span class="nav-icon">⬢</span> Discovery
+                </a></li>
+                <li><a href="/api/v1/validation/queue" class="nav-link {% if active == 'queue' %}active{% endif %}">
+                    <span class="nav-icon">◈</span> Validation Queue
+                    {% if queue_count %}<span class="badge">{{ queue_count }}</span>{% endif %}
+                </a></li>
+                <li><a href="/api/v1/validation/findings" class="nav-link {% if active == 'findings' %}active{% endif %}">
+                    <span class="nav-icon">◉</span> Findings
+                </a></li>
+                <li><a href="/api/v1/validation/changes" class="nav-link {% if active == 'changes' %}active{% endif %}">
+                    <span class="nav-icon">◎</span> Changes
+                </a></li>
+                <li><a href="/api/v1/validation/history" class="nav-link {% if active == 'history' %}active{% endif %}">
+                    <span class="nav-icon">◷</span> History
+                </a></li>
+                <li><a href="/api/v1/validation/settings" class="nav-link {% if active == 'settings' %}active{% endif %}">
+                    <span class="nav-icon">◌</span> Settings
+                </a></li>
+            </ul>
+            <div class="sidebar-footer">
+                <span class="version">v0.1.0</span>
+            </div>
+        </nav>
+
+        <main class="content">
+            <div class="page-header">
+                <h1>{% block heading %}{% endblock %}</h1>
+                <div class="page-actions">{% block actions %}{% endblock %}</div>
+            </div>
+            <div class="page-body">
+                {% block content %}{% endblock %}
+            </div>
+        </main>
+    </div>
+
+    <div id="toast-container"></div>
+    <div id="modal-overlay" class="modal-overlay hidden"></div>
+    <div id="modal-container"></div>
+</body>
+</html>

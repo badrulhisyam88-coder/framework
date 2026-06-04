@@ -1,0 +1,179 @@
+{#
+  Partial: investigation_maturity_banner.html
+  Context: memory (InvestigationMemory snapshot)
+  Renders the top-of-feed adaptive summary: maturity per category, evidence
+  quality, strengths, and reinforcement gaps. Always traceable — every value
+  comes from a deterministic counter.
+#}
+{% if campaign_chips is defined and campaign_chips %}
+<div class="ws-campaign-strip">
+  {% for chip in campaign_chips %}
+  <a class="ws-campaign-chip ws-campaign-chip--{{ chip.status }}"
+     href="#campaign/{{ chip.campaign_id }}"
+     title="View campaign dashboard"
+     hx-get="/api/v1/validation/investigation-core/campaigns/{{ chip.campaign_id }}/dashboard/partial"
+     hx-target="#campaign-modal-content"
+     hx-swap="innerHTML"
+     onclick="document.getElementById('campaign-modal')?.classList.add('open')">
+    <span class="ws-campaign-chip-icon">◆</span>
+    <span class="ws-campaign-chip-text">Campaign: {{ chip.title }}</span>
+    <span class="ws-campaign-chip-stage">{{ chip.stage | replace('_', ' ') }}</span>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if memory %}
+<div class="ws-maturity">
+  <div class="ws-maturity-row">
+    <div class="ws-maturity-cell">
+      <div class="ws-maturity-label">Investigation activity</div>
+      <div class="ws-maturity-value mono">
+        {{ memory.total_milestones_achieved }} milestone·{{ memory.total_actions_completed }} action·{{ memory.total_evidence_artifacts }} evidence
+      </div>
+    </div>
+
+    <div class="ws-maturity-cell">
+      <div class="ws-maturity-label">Evidence quality</div>
+      <div class="ws-maturity-value mono ws-grade-{{ memory.evidence_quality.grade }}">
+        {% if memory.evidence_quality.total_artifacts %}
+          {{ memory.evidence_quality.overall_score }}/100 · {{ memory.evidence_quality.grade }}
+        {% else %}
+          no evidence yet
+        {% endif %}
+      </div>
+      {% if memory.evidence_quality.weak_types %}
+      <div class="ws-maturity-sub" title="Weak artifact types — average score below 50">
+        weak: {{ memory.evidence_quality.weak_types | join(', ') }}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if memory.maturity_by_category %}
+  <div class="ws-maturity-cats">
+    {% for cat, mat in memory.maturity_by_category.items() %}
+    <div class="ws-maturity-cat ws-maturity-level-{{ mat.level }}" title="{{ mat.reasoning | join(' | ') }}">
+      <span class="ws-maturity-cat-name">{{ mat.label }}</span>
+      <span class="ws-maturity-cat-level">{{ mat.level | replace('_', ' ') }}</span>
+      <span class="ws-maturity-cat-counts mono">
+        {{ mat.milestones_achieved }}m · {{ mat.actions_completed }}a · {{ mat.skills_completed }}s
+      </span>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if memory.strengths or memory.needs_reinforcement %}
+  <div class="ws-maturity-summary">
+    {% if memory.strengths %}
+    <div class="ws-maturity-strengths">
+      <span class="ws-maturity-summary-label">Strengths</span>
+      <ul>
+        {% for s in memory.strengths %}<li>✓ {{ s }}</li>{% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+    {% if memory.needs_reinforcement %}
+    <div class="ws-maturity-gaps">
+      <span class="ws-maturity-summary-label">Needs reinforcement</span>
+      <ul>
+        {% for g in memory.needs_reinforcement %}<li>⚠ {{ g }}</li>{% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+<style>
+.ws-maturity {
+  margin-bottom: .6rem; padding: .6rem .8rem;
+  background: color-mix(in srgb, var(--accent) 5%, var(--bg-raised));
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border));
+  border-radius: 5px;
+}
+.ws-maturity-row { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: .4rem; }
+.ws-maturity-cell { flex: 1; min-width: 12rem; }
+.ws-maturity-label {
+  font-size: .6rem; color: var(--text-muted); font-weight: 600;
+  text-transform: uppercase; letter-spacing: .05em; margin-bottom: .15rem;
+}
+.ws-maturity-value { font-size: .78rem; font-weight: 600; color: var(--text-primary); }
+.ws-maturity-sub { font-size: .62rem; color: var(--text-muted); margin-top: .15rem; font-style: italic; }
+.ws-grade-strong   { color: var(--low); }
+.ws-grade-adequate { color: var(--accent); }
+.ws-grade-thin     { color: var(--medium); }
+.ws-grade-weak     { color: var(--critical); }
+
+.ws-maturity-cats {
+  display: flex; flex-wrap: wrap; gap: .3rem;
+  padding: .35rem 0; margin: .3rem 0;
+  border-top: 1px dashed color-mix(in srgb, var(--border) 70%, transparent);
+  border-bottom: 1px dashed color-mix(in srgb, var(--border) 70%, transparent);
+}
+.ws-maturity-cat {
+  display: flex; gap: .35rem; align-items: baseline;
+  padding: 2px 7px; border-radius: 3px; font-size: .68rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+}
+.ws-maturity-cat-name { font-weight: 600; }
+.ws-maturity-cat-level {
+  font-size: .58rem; text-transform: uppercase; letter-spacing: .05em;
+  font-weight: 600; padding: 1px 4px; border-radius: 2px;
+}
+.ws-maturity-cat-counts { font-size: .6rem; color: var(--text-muted); }
+
+.ws-maturity-level-exposure_only .ws-maturity-cat-level {
+  background: color-mix(in srgb, var(--text-muted) 18%, transparent); color: var(--text-muted);
+}
+.ws-maturity-level-beginner .ws-maturity-cat-level {
+  background: color-mix(in srgb, var(--medium) 18%, transparent); color: var(--medium);
+}
+.ws-maturity-level-intermediate .ws-maturity-cat-level {
+  background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent);
+}
+.ws-maturity-level-advanced .ws-maturity-cat-level {
+  background: color-mix(in srgb, var(--low) 22%, transparent); color: var(--low);
+}
+.ws-maturity-level-advanced { border-color: color-mix(in srgb, var(--low) 35%, var(--border)); }
+.ws-maturity-level-exposure_only { opacity: .85; }
+
+.ws-maturity-summary {
+  display: flex; gap: 1.5rem; flex-wrap: wrap; padding-top: .35rem;
+}
+.ws-maturity-strengths, .ws-maturity-gaps { flex: 1; min-width: 14rem; }
+.ws-maturity-summary-label {
+  display: block; font-size: .6rem; color: var(--text-muted); font-weight: 600;
+  text-transform: uppercase; letter-spacing: .05em; margin-bottom: .15rem;
+}
+.ws-maturity-strengths ul, .ws-maturity-gaps ul {
+  font-size: .68rem; color: var(--text-secondary); margin: 0; padding-left: 0;
+  list-style: none;
+}
+.ws-maturity-strengths li { color: var(--low); line-height: 1.5; }
+.ws-maturity-gaps li      { color: var(--medium); line-height: 1.5; }
+
+/* Phase 16 — campaign chip on investigation banner */
+.ws-campaign-strip { display: flex; gap: .35rem; flex-wrap: wrap; margin-bottom: .35rem; }
+.ws-campaign-chip {
+  display: inline-flex; align-items: baseline; gap: .35rem;
+  padding: .3rem .6rem; border-radius: 4px; text-decoration: none;
+  font-size: .68rem; font-weight: 600; cursor: pointer;
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-raised));
+  border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--border));
+  color: var(--text-primary);
+}
+.ws-campaign-chip:hover { background: color-mix(in srgb, var(--accent) 14%, var(--bg-raised)); }
+.ws-campaign-chip-icon { color: var(--accent); }
+.ws-campaign-chip-text { color: var(--text-primary); }
+.ws-campaign-chip-stage {
+  font-size: .55rem; padding: 1px 5px; border-radius: 2px;
+  background: var(--bg-raised); border: 1px solid var(--border);
+  text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted);
+}
+.ws-campaign-chip--completed { border-color: color-mix(in srgb, var(--low) 35%, var(--border)); }
+.ws-campaign-chip--paused    { border-color: color-mix(in srgb, var(--medium) 35%, var(--border)); }
+</style>
+{% endif %}

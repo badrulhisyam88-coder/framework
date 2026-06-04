@@ -1,0 +1,180 @@
+{# Phase 58 — Capture bundle side panel.
+
+   Phase 57c — HOW_TO_REPRODUCE.md (when present) renders FIRST,
+   visually distinct, auto-expanded with server-rendered markdown.
+   Bundles without one fall back to the plain file list — graceful.
+
+   Context:
+     bundle:           ArtifactBundle dataclass (see capture/bundler.py)
+     readme_artifact:  the HOW_TO_REPRODUCE.md Artifact or None
+     readme_html:      pre-rendered HTML for readme_artifact.content,
+                       or None
+     other_artifacts:  the rest of the artifacts (readme excluded)
+     investigation_id, node_id  — for raw-file URLs
+#}
+<div class="space-y-3 text-[#1f2328] text-xs">
+
+  {# ── Header ──────────────────────────────────────────────── #}
+  <div>
+    <div class="text-zinc-500 uppercase text-[10px] tracking-wide mb-0.5">
+      capture bundle
+    </div>
+    <div class="text-sm font-semibold text-[#1f2328]">{{ bundle.label }}</div>
+    {% if bundle.captured_value %}
+    <div class="text-sm font-mono text-[#1f2328] mt-1">
+      Captured: <span class="text-[#1a7f37]">{{ bundle.captured_value }}</span>
+    </div>
+    {% endif %}
+    <div class="text-[10px] text-zinc-500 mt-0.5">
+      {{ bundle.artifacts|length }} artifact{{ bundle.artifacts|length != 1 and 's' or '' }}
+      · bundle id <code class="text-[#656d76]">{{ bundle.bundle_id }}</code>
+    </div>
+  </div>
+
+  {# ── One-click impersonation bookmarklet (Phase 59z) ──────────────
+
+     OPERATOR-ACCEPTED RISK: this affordance provides one-click
+     impersonation using captured session tokens. The operator has
+     explicitly accepted that:
+       • the button operates against ANY target regardless of trust
+         level (lab, staging, production, customer engagement),
+       • accidental clicks result in unauthorized session use on
+         whatever target was last exploited,
+       • browser history records the launcher URL but not the
+         impersonation,
+       • the feature does not differentiate between lab and
+         production contexts.
+     Acceptable for a personal dev/lab tool with a single operator.
+     If this tool is ever used in a multi-operator or non-lab
+     context, this feature should be reviewed and potentially gated.
+
+     Token transit: the bookmarklet's `javascript:` href contains
+     the JWT inline. It is NEVER sent to the target server as a URL
+     parameter (javascript: URLs do not generate network requests
+     against the target origin). If the operator drags the
+     bookmarklet to their bookmarks bar, the token persists in the
+     browser's bookmark store — that's an additional exposure the
+     operator has accepted by adopting this workflow.
+  #}
+  {% if bundle.bookmarklet_href %}
+  <div class="rounded border border-amber-700/60 bg-[#0d1117] shadow-[0_0_0_1px_rgba(245,158,11,.15)]">
+    <div class="px-3 py-2">
+      <div class="flex items-center gap-2 mb-1">
+        <span class="text-amber-400 text-base">⚠</span>
+        <span class="text-[11px] text-amber-200 font-semibold">
+          One-click impersonation
+        </span>
+      </div>
+      <div class="text-[10px] text-zinc-400 leading-relaxed mb-2">
+        Drag the button below to your bookmarks bar (once per bundle).
+        Then while on the target tab, click the bookmark — your
+        browser will write the captured token into the target's
+        localStorage and reload. You will be logged in as the
+        bypassed user. <strong class="text-amber-200">This runs against
+        whatever target is open</strong>; it does not distinguish
+        lab from production.
+      </div>
+      <div class="flex items-center gap-2">
+        <a href="{{ bundle.bookmarklet_href }}"
+           class="inline-block rounded bg-amber-900/40 hover:bg-amber-900/60
+                  border border-amber-700/60 px-3 py-1
+                  text-[11px] text-amber-100 font-medium cursor-grab"
+           title="Drag me to your bookmarks bar"
+           onclick="event.preventDefault(); alert('Drag this button to your bookmarks bar — clicking it here in the panel runs nothing (the active page is the tool, not the target).');">
+          ⚠ Open as captured user →
+        </a>
+        <button type="button"
+                class="text-[10px] text-zinc-400 hover:text-zinc-200
+                       px-1.5 py-0.5 border border-zinc-700 rounded"
+                onclick="navigator.clipboard.writeText({{ bundle.bookmarklet_href|tojson }}); this.textContent = 'Copied'; setTimeout(() => this.textContent = 'Copy bookmarklet', 1500);">
+          Copy bookmarklet
+        </button>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {# ── HOW_TO_REPRODUCE.md (Phase 57c) — prominent, auto-expanded ── #}
+  {% if readme_artifact %}
+  <div class="rounded border border-blue-700/60 bg-[#0d1117] shadow-[0_0_0_1px_rgba(88,166,255,.15)]">
+    <details open>
+      <summary class="cursor-pointer flex items-center justify-between gap-2
+                      px-2 py-1.5 hover:bg-blue-900/10 rounded-t">
+        <div class="flex items-center gap-2 min-w-0">
+          <span class="text-blue-400 shrink-0 text-base">📖</span>
+          <span class="font-mono text-[12px] text-zinc-50 truncate font-semibold">
+            {{ readme_artifact.filename }}
+          </span>
+          <span class="text-[9px] px-1.5 py-0.5 rounded
+                       bg-blue-900/60 text-blue-200 font-semibold shrink-0">
+            Start here
+          </span>
+        </div>
+        <div class="text-[10px] text-zinc-500 shrink-0">
+          {{ readme_artifact.size_bytes }} B
+        </div>
+      </summary>
+      <div class="px-3 pb-3 pt-1">
+        <div class="text-[10px] text-zinc-500 mb-2">{{ readme_artifact.description }}</div>
+        <div class="flex items-center justify-between mb-2 gap-2">
+          <a href="/api/v1/validation/workspace/bundles/{{ bundle.bundle_id }}/files/{{ readme_artifact.filename }}"
+             target="_blank" rel="noopener noreferrer"
+             class="text-[10px] text-blue-400 hover:text-blue-300 underline">
+            Open raw markdown
+          </a>
+        </div>
+        <div class="markdown-body space-y-1">{{ readme_html|safe }}</div>
+      </div>
+    </details>
+  </div>
+  {% endif %}
+
+  {# ── Other artifacts ─────────────────────────────────────── #}
+  <div class="space-y-1">
+    {% for art in other_artifacts %}
+    <div class="rounded border border-zinc-800 bg-[#0d1117] hover:border-zinc-600 transition-colors">
+      <details>
+        <summary class="cursor-pointer flex items-center justify-between gap-2 px-2 py-1.5
+                        hover:bg-zinc-900/50">
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="text-zinc-500 shrink-0">
+              {%- if art.content_type == 'application/json' -%}{ }
+              {%- elif art.content_type.startswith('text/html') -%}&lt;/&gt;
+              {%- elif art.content_type.startswith('text/') -%}≡
+              {%- else -%}▤
+              {%- endif -%}
+            </span>
+            <span class="font-mono text-[11px] text-zinc-200 truncate">
+              {{ art.filename }}
+            </span>
+          </div>
+          <div class="text-[10px] text-zinc-500 shrink-0 flex items-center gap-2">
+            <span>{{ art.size_bytes }} B</span>
+          </div>
+        </summary>
+        <div class="px-2 pb-2">
+          <div class="text-[10px] text-zinc-500 mb-1">{{ art.description }}</div>
+          <div class="flex items-center justify-between mb-1 gap-2">
+            <a href="/api/v1/validation/workspace/bundles/{{ bundle.bundle_id }}/files/{{ art.filename }}"
+               target="_blank" rel="noopener noreferrer"
+               class="text-[10px] text-blue-400 hover:text-blue-300 underline">
+              Open raw ({{ art.content_type }})
+            </a>
+            <button type="button"
+                    class="text-[10px] text-zinc-400 hover:text-zinc-200 px-1.5 py-0.5 border border-zinc-700 rounded"
+                    onclick="navigator.clipboard.writeText(this.parentElement.nextElementSibling.textContent.trim()); this.textContent = 'Copied'; setTimeout(() => this.textContent = 'Copy', 1500);">
+              Copy
+            </button>
+          </div>
+          <pre class="font-mono text-[10px] text-zinc-300 bg-[#161b22] border border-zinc-800 rounded p-2 overflow-x-auto max-h-80 overflow-y-auto whitespace-pre-wrap">{{ art.content }}</pre>
+        </div>
+      </details>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% if not bundle.artifacts %}
+  <div class="text-zinc-500 italic">No artifacts captured in this bundle.</div>
+  {% endif %}
+
+</div>

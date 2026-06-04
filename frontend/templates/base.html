@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}AI Assist{% endblock %}</title>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>tailwind.config = { corePlugins: { preflight: true } };</script>
+    <script src="/static/js/htmx.min.js"></script>
+    <link rel="stylesheet" href="/static/css/main.css">
+    <style>
+        body { font-family: 'IBM Plex Sans', system-ui, sans-serif; background: #f6f8fa; color: #1f2328; }
+        .mono { font-family: 'IBM Plex Mono', monospace; }
+        /* Dev-mode gating */
+        .dev-only { display: none !important; }
+        .dev-mode .dev-only { display: block !important; }
+    </style>
+</head>
+<body class="bg-[#f6f8fa] text-[#1f2328] min-h-screen">
+<div class="flex min-h-screen">
+
+    <!-- SIDEBAR -->
+    <nav class="w-64 border-r border-[#d0d7de] bg-white flex flex-col fixed top-0 bottom-0 left-0 z-20">
+
+        <!-- Logo -->
+        <div class="px-6 py-5 border-b border-[#d0d7de]">
+            <div class="flex items-center gap-2">
+                <div class="w-5 h-5 border-2 border-[#0969da] rotate-45 flex-shrink-0"></div>
+                <span class="mono font-semibold text-base">AI Assist</span>
+            </div>
+            <div class="mono text-[10px] text-[#656d76] tracking-widest mt-1 ml-7">INVESTIGATION PLATFORM</div>
+        </div>
+
+        <!-- Nav -->
+        <div class="py-4 flex-1 overflow-y-auto">
+            <div class="mono text-[10px] text-[#656d76] tracking-widest px-6 mb-2">OPERATIONS</div>
+
+            <a href="/api/v1/validation/investigations"
+               class="w-full flex items-center gap-3 px-6 py-2 text-sm hover:bg-[#f3f4f6] {% if active == 'investigations' %}text-[#0969da] bg-[#ddf4ff]{% else %}text-[#1f2328]{% endif %}">
+                <span class="w-2 h-2 rounded-full {% if active == 'investigations' %}bg-[#0969da]{% else %}border border-[#656d76]{% endif %}"></span>
+                <span>Investigations</span>
+            </a>
+
+            {# Phase tabs + category tree — only shown inside an active investigation #}
+            {% if investigation_id %}
+            <div class="ml-6 mt-1">
+              <button data-phase="recon"
+                      class="phase-sidebar-tab w-full flex items-center gap-2 pl-6 pr-4 py-1.5 text-xs text-[#656d76] hover:bg-[#f3f4f6] hover:text-[#1f2328]">
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24"
+                     fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M19.07 4.93A10 10 0 0 0 6.99 3.34"/><path d="M4 6h.01"/>
+                  <path d="M2.29 9.62A10 10 0 1 0 21.31 8.35"/><path d="M16.24 7.76A6 6 0 1 0 17.7 13.5"/>
+                  <path d="M12 18h.01"/><path d="M17.99 11.66A6 6 0 0 1 15.77 16.67"/>
+                  <circle cx="12" cy="12" r="2"/><path d="M12 12L17 7"/>
+                </svg>
+                Recon
+              </button>
+              <button data-phase="enumeration"
+                      class="phase-sidebar-tab w-full flex items-center gap-2 pl-6 pr-4 py-1.5 text-xs text-[#656d76] hover:bg-[#f3f4f6] hover:text-[#1f2328]">
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24"
+                     fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+                Enumeration
+              </button>
+              <button data-phase="exploitation"
+                      class="phase-sidebar-tab w-full flex items-center gap-2 pl-6 pr-4 py-1.5 text-xs text-[#656d76] hover:bg-[#f3f4f6] hover:text-[#1f2328]">
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24"
+                     fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round">
+                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                </svg>
+                Exploitation
+              </button>
+            </div>
+            <div id="category-tree" class="hidden">
+                {# Populated by workspace.js from workspace-data.json #}
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Unknowns banner — persistent indicator above System/Settings.
+             Hidden at count=0; shown when pending unknowns need operator review.
+             Non-clickable: awareness only; action is in the exploitation workspace Zone B.
+             Updated by _pollUnknownsCount() in this page's script block. -->
+        <div id="left-unknowns-banner"
+             style="display:none;"
+             class="mx-4 mb-3 px-3 py-2 rounded
+                    bg-[#fff8c5] border border-[#9a6700]
+                    text-[11px] text-[#9a6700] font-semibold mono
+                    select-none">
+          <span id="left-unknowns-label">⚠ 0 unknowns to review</span>
+        </div>
+
+        <!-- System -->
+        <div class="py-4 border-t border-[#d0d7de]">
+            <div class="mono text-[10px] text-[#656d76] tracking-widest px-6 mb-2">SYSTEM</div>
+            <a href="/api/v1/validation/settings"
+               class="w-full flex items-center gap-3 px-6 py-2 text-sm hover:bg-[#f3f4f6] {% if active == 'settings' %}text-[#0969da] bg-[#ddf4ff]{% else %}text-[#656d76]{% endif %}">
+                <span class="w-2 h-2 rounded-full border border-[#656d76]"></span>
+                <span>Settings</span>
+            </a>
+        </div>
+
+        <!-- Footer -->
+        <div class="px-6 py-3 border-t border-[#d0d7de] flex items-center justify-between text-xs text-[#656d76]">
+            <span class="mono">v3.0.0</span>
+            <div class="flex items-center gap-2">
+                <button id="theme-btn" type="button"
+                        class="flex items-center gap-1 px-2 py-1 rounded border border-[#d0d7de] hover:bg-[#f3f4f6] mono text-xs"
+                        onclick="toggleTheme()">
+                    <span id="theme-label">☀ Light</span>
+                </button>
+                <button class="mono text-[#656d76] text-xs dev-only" onclick="toggleDevMode()">Dev</button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- MAIN -->
+    <main class="flex-1 ml-64 {% block main_class %}overflow-y-auto{% endblock %}">
+        {% block content %}{% endblock %}
+    </main>
+
+</div>
+
+{# Start investigation modal #}
+<div id="start-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center" style="background: rgba(13,17,23,0.5);">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-xl mx-4">
+        <div class="p-6">
+            <div class="flex justify-between items-start mb-4">
+                <h2 class="mono text-base tracking-widest">START INVESTIGATION</h2>
+                <button onclick="closeStartModal()" class="text-[#656d76] hover:text-[#1f2328]">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/>
+                    </svg>
+                </button>
+            </div>
+            <p class="text-sm text-[#656d76] mb-5">
+                Investigation branches will grow as surfaces are discovered.
+                You can approve actions, capture evidence, and verify remediation inline.
+            </p>
+            <form onsubmit="submitStartModal(event)">
+                <div class="mb-4">
+                    <label class="mono text-[10px] tracking-widest text-[#1f2328] block mb-2">TARGET (IP, URL, OR HOSTNAME)</label>
+                    <input id="modal-target" type="text"
+                           placeholder="192.168.1.100 or http://localhost:10000"
+                           class="mono w-full border-2 border-[#0969da] rounded px-3 py-2 text-sm focus:outline-none"
+                           required />
+                </div>
+                <div class="mb-3">
+                    <label class="mono text-[10px] tracking-widest text-[#1f2328] block mb-2">ENVIRONMENT</label>
+                    <div class="flex items-center gap-6 text-sm">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="modal-env" value="web_app" checked class="accent-[#0969da]" /> Web App</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="modal-env" value="api" class="accent-[#0969da]" /> API</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="modal-env" value="infrastructure" class="accent-[#0969da]" /> Infrastructure</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="modal-env" value="learning_lab" class="accent-[#0969da]" /> Learning Lab</label>
+                    </div>
+                    <p class="text-xs text-[#656d76] mt-2">Stored as a tag on the investigation — guides downstream branch suggestions.</p>
+                </div>
+                {# Self-login fields (optional, used by counter-reset / session-establishment concepts) #}
+                <div class="mt-4 pt-4 border-t border-[#d0d7de]">
+                    <div class="mb-3">
+                        <label class="mono text-[10px] tracking-widest text-[#1f2328] block mb-2">SELF-LOGIN USERNAME <span class="text-[#656d76] normal-case tracking-normal">(optional)</span></label>
+                        <input id="modal-self-user" type="text"
+                               placeholder="e.g. wiener"
+                               autocomplete="off"
+                               class="mono w-full border border-[#d0d7de] rounded px-3 py-2 text-sm focus:outline-none focus:border-[#0969da]" />
+                        <p class="text-xs text-[#656d76] mt-1">Used for counter-reset and session-establishment concepts. Leave blank if not needed.</p>
+                    </div>
+                    <div class="mb-1">
+                        <label class="mono text-[10px] tracking-widest text-[#1f2328] block mb-2">SELF-LOGIN PASSWORD <span class="text-[#656d76] normal-case tracking-normal">(optional)</span></label>
+                        <input id="modal-self-pass" type="password"
+                               placeholder="••••••••"
+                               autocomplete="new-password"
+                               class="mono w-full border border-[#d0d7de] rounded px-3 py-2 text-sm focus:outline-none focus:border-[#0969da]" />
+                        <p class="text-xs text-[#656d76] mt-1">Used for counter-reset and session-establishment concepts. Leave blank if not needed.</p>
+                    </div>
+                    <div id="modal-self-login-error" class="hidden text-xs text-[#cf222e] mt-1"></div>
+                </div>
+                <div class="flex justify-end gap-2 mt-6">
+                    <button type="button" onclick="closeStartModal()"
+                            class="px-4 py-2 rounded border border-[#d0d7de] text-sm hover:bg-[#f3f4f6]">Cancel</button>
+                    <button type="submit"
+                            class="bg-[#0969da] text-white px-4 py-2 rounded text-sm font-medium hover:bg-[#0860ca]">
+                        Start investigation →
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    window.openStartModal = function () {
+        document.getElementById('start-modal').classList.remove('hidden');
+        var inp = document.getElementById('modal-target');
+        if (inp) inp.focus();
+    };
+    window.closeStartModal = function () {
+        document.getElementById('start-modal').classList.add('hidden');
+    };
+    window.submitStartModal = function (e) {
+        e.preventDefault();
+        var target = ((document.getElementById('modal-target') || {}).value || '').trim();
+        if (!target) return;
+
+        var selfUser = ((document.getElementById('modal-self-user') || {}).value || '').trim();
+        var selfPass = ((document.getElementById('modal-self-pass') || {}).value || '').trim();
+        var errEl    = document.getElementById('modal-self-login-error');
+
+        // Pair-completeness validation: both or neither
+        if ((selfUser && !selfPass) || (!selfUser && selfPass)) {
+            if (errEl) {
+                errEl.textContent = 'Both self-login username and password are required together, or leave both blank.';
+                errEl.classList.remove('hidden');
+            }
+            return;
+        }
+        if (errEl) errEl.classList.add('hidden');
+
+        var env = (document.querySelector('input[name="modal-env"]:checked') || {}).value || 'web_app';
+        var payload = { target: target, environment: env };
+        if (selfUser) {
+            payload.provided_self_user = selfUser;
+            payload.self_pass          = selfPass;
+        }
+
+        var submitBtn = e.target.querySelector('button[type="submit"]');
+        if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Starting…'; }
+
+        fetch('/api/v1/validation/investigations/start', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify(payload),
+        }).then(function (r) {
+            return r.json().then(function (d) {
+                if (r.ok && d.workspace_url) {
+                    window.location.href = d.workspace_url;
+                } else {
+                    if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Start investigation →'; }
+                    alert((d && d.detail) || 'Failed to start investigation.');
+                }
+            });
+        }).catch(function (err) {
+            if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Start investigation →'; }
+            alert('Error starting investigation: ' + err.message);
+        });
+    };
+
+    function toggleTheme() {
+        // Light-only in V1.4a — toggle is a no-op; stub for future V1.4c token unification
+        var lbl = document.getElementById('theme-label');
+        if (lbl) lbl.textContent = '☀ Light';
+    }
+
+    function toggleDevMode() {
+        document.documentElement.classList.toggle('dev-mode');
+    }
+
+    // ── Left-panel unknowns banner: poll cross-investigation pending count ──────
+    // Non-clickable awareness indicator above System/Settings.
+    // Reuses the same count source as Zone B (count_pending_async).
+    (function () {
+        'use strict';
+        var _POLL_INTERVAL = 30000;   // 30s — low-frequency; count changes rarely
+
+        function _updateUnknownsBanner(count) {
+            var banner = document.getElementById('left-unknowns-banner');
+            var label  = document.getElementById('left-unknowns-label');
+            if (!banner || !label) return;
+            if (count > 0) {
+                label.textContent = '⚠ ' + count + ' unknown' + (count === 1 ? '' : 's') + ' to review';
+                banner.style.display = '';
+            } else {
+                banner.style.display = 'none';
+            }
+        }
+
+        function _pollUnknownsCount() {
+            fetch('/api/v1/validation/workspace/unknowns/count')
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (d) {
+                    if (d && typeof d.count === 'number') {
+                        _updateUnknownsBanner(d.count);
+                    }
+                })
+                .catch(function () { /* silently ignore — non-critical indicator */ });
+        }
+
+        // First poll on DOMContentLoaded; then every 30s
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', _pollUnknownsCount);
+        } else {
+            _pollUnknownsCount();
+        }
+        setInterval(_pollUnknownsCount, _POLL_INTERVAL);
+    })();
+</script>
+{% block extra_js %}{% endblock %}
+</body>
+</html>

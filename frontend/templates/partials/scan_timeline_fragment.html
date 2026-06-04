@@ -1,0 +1,89 @@
+{#
+  Partial: scan_timeline_fragment.html
+  Context: scan, events (list[TimelineEvent]), confidence, confidence_msg
+  Usage: hx-get="/api/v1/validation/scanner/scans/{scan_id}/timeline-partial"
+         loaded lazily when user expands a scan row
+#}
+<div class="so-tl">
+
+  {# ── Execution stages ────────────────────────────────────────────── #}
+  {% if events %}
+    {% for event in events %}
+    <div class="so-tl-row so-tl-row--{{ event.event_type | replace('_', '-') }}">
+      <span class="so-tl-icon">
+        {%- if event.event_type in ('scan_completed', 'target_reachable', 'findings_normalized') -%}✓
+        {%- elif event.event_type in ('scan_failed', 'target_unreachable') -%}✗
+        {%- elif event.event_type == 'target_fingerprinted' -%}◉
+        {%- elif event.event_type == 'scan_started' -%}▶
+        {%- elif event.event_type == 'target_resolved' -%}→
+        {%- elif event.event_type == 'scan_queued' -%}●
+        {%- else -%}·{%- endif -%}
+      </span>
+      <span class="so-tl-label">{{ event.summary }}</span>
+      <span class="so-tl-time mono">{{ event.timestamp.strftime('%H:%M:%S') }}</span>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="so-tl-empty">No execution events recorded yet.</div>
+  {% endif %}
+
+  {# ── Confidence summary (terminal scans only) ─────────────────── #}
+  {% if scan.is_terminal %}
+  <div class="so-tl-summary so-tl-summary--{{ confidence }}">
+    <span class="so-tl-conf">
+      {%- if confidence == 'ok' -%}✓
+      {%- elif confidence == 'warn' -%}⚠
+      {%- else -%}✗{%- endif -%}
+      &nbsp;{{ confidence_msg }}
+    </span>
+    {% if scan.duration_seconds %}
+      <span class="so-tl-dur">{{ scan.duration_seconds | round | int }}s</span>
+    {% endif %}
+    {% if scan.findings_count > 0 %}
+      <span class="so-tl-evidence">· Evidence linked automatically</span>
+    {% endif %}
+  </div>
+  {% elif not scan.is_terminal %}
+  <div class="so-tl-summary so-tl-summary--pending">
+    <span class="so-tl-conf">⟳ &nbsp;{{ confidence_msg }}</span>
+    <span class="so-tl-dur" style="font-size:.65rem;color:var(--text-muted);">Refreshes on next expand</span>
+  </div>
+  {% endif %}
+
+</div>
+
+<style>
+.so-tl { display: flex; flex-direction: column; gap: .22rem; }
+.so-tl-row {
+  display: flex; align-items: baseline; gap: .4rem; font-size: .73rem; padding: .12rem 0;
+}
+.so-tl-icon { flex-shrink: 0; width: .85rem; font-size: .7rem; }
+.so-tl-label { flex: 1; color: var(--text-secondary); }
+.so-tl-time  { flex-shrink: 0; font-size: .63rem; color: var(--text-muted); }
+.so-tl-empty { font-size: .72rem; color: var(--text-muted); }
+
+/* Stage icon colours */
+.so-tl-row--scan-completed .so-tl-icon    { color: var(--low); }
+.so-tl-row--target-reachable .so-tl-icon  { color: var(--low); }
+.so-tl-row--findings-normalized .so-tl-icon { color: var(--low); }
+.so-tl-row--scan-failed .so-tl-icon       { color: var(--critical); }
+.so-tl-row--target-unreachable .so-tl-icon { color: var(--critical); }
+.so-tl-row--scan-started .so-tl-icon      { color: var(--accent); }
+.so-tl-row--target-fingerprinted .so-tl-icon { color: var(--accent); }
+.so-tl-row--target-resolved .so-tl-icon   { color: var(--text-muted); }
+.so-tl-row--scan-queued .so-tl-icon       { color: var(--text-muted); }
+
+/* Confidence summary bar */
+.so-tl-summary {
+  display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
+  margin-top: .4rem; padding-top: .35rem;
+  border-top: 1px solid var(--border); font-size: .73rem;
+}
+.so-tl-conf   { font-weight: 600; }
+.so-tl-dur    { font-family: var(--mono); font-size: .65rem; color: var(--text-muted); }
+.so-tl-evidence { font-size: .67rem; color: var(--text-muted); }
+.so-tl-summary--ok      .so-tl-conf { color: var(--low); }
+.so-tl-summary--warn    .so-tl-conf { color: var(--medium); }
+.so-tl-summary--error   .so-tl-conf { color: var(--critical); }
+.so-tl-summary--pending .so-tl-conf { color: var(--accent); }
+</style>

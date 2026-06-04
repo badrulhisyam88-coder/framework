@@ -1,0 +1,196 @@
+{#
+  Phase 28: quick-capture form. Single textarea, server-inferred type.
+  Phase 31 (architectural fix): removed all client-side JS — the previous
+  detection mirror embedded payload signatures including '</script>' as a
+  string literal, which prematurely closed the surrounding <script> tag and
+  caused the rest of the JS source (regexes, payload arrays, function
+  bodies) to render as visible text inside the operator UI.
+
+  The fix is structural: the client no longer mirrors the server's
+  inference. The server runs `infer_artifact_type()` on submit and the
+  success card (`evidence_capture_success.html`) surfaces the inferred
+  type via `artifact.type_label`. Type override is via CSS-styled radio
+  inputs — pure HTML, zero JS, zero embedded source code.
+#}
+<div class="qcap" id="qcap-{{ finding_id or 'anon' }}-{{ action_id or 'plain' }}">
+<style>
+  .qcap {
+    border:1px solid var(--bg-raised);
+    border-left:3px solid var(--low, #6ad36a);
+    border-radius:0 5px 5px 0;
+    background: rgba(255,255,255,.018);
+    padding:.45rem .55rem;
+    margin-top:.4rem;
+    font-size:.72rem;
+  }
+  .qcap__row { display:flex; flex-direction:column; gap:.3rem; }
+  .qcap__hints {
+    font-size:.62rem; color: var(--text-muted);
+    margin-bottom:.25rem;
+    display:flex; justify-content:space-between; align-items:baseline;
+  }
+  .qcap__hints strong { color: var(--text-secondary); }
+  .qcap__close {
+    background:transparent; border:none; cursor:pointer;
+    color: var(--text-muted); font-size:.85rem; padding:0 .25rem;
+  }
+  .qcap__close:hover { color: var(--critical); }
+
+  .qcap__textarea {
+    width:100%; box-sizing:border-box;
+    min-height: 60px; resize: vertical;
+    border:1px solid var(--bg-raised); border-radius:4px;
+    background: rgba(0,0,0,.22);
+    color: var(--text-primary);
+    font-family: var(--mono, monospace); font-size:.72rem;
+    padding:.35rem .45rem;
+    line-height:1.45;
+  }
+  .qcap__textarea:focus { outline:none; border-color: var(--accent, #4aa3df); }
+  .qcap__textarea::placeholder { color: var(--text-muted); font-family: inherit; }
+
+  /* Type-override radio strip — pure CSS, no JS. The hidden radios drive
+     the visible label styling via :checked sibling selector. */
+  .qcap__types {
+    display:flex; gap:.3rem; flex-wrap:wrap; align-items:center;
+    font-size:.7rem;
+  }
+  .qcap__type-radio { position:absolute; opacity:0; pointer-events:none; }
+  .qcap__type-label {
+    cursor:pointer;
+    font-size:.62rem; padding:.1rem .45rem; border-radius:9px;
+    border:1px solid var(--bg-raised); color: var(--text-muted);
+    background: rgba(0,0,0,.18);
+    transition: color .12s, border-color .12s;
+  }
+  .qcap__type-label:hover {
+    color: var(--accent, #4aa3df); border-color: var(--accent, #4aa3df);
+  }
+  .qcap__type-radio:checked + .qcap__type-label {
+    color: var(--accent, #4aa3df); border-color: var(--accent, #4aa3df);
+    background: rgba(74,163,223,.08);
+  }
+  .qcap__type-label--auto { color: var(--text-secondary); }
+
+  .qcap__actions {
+    display:flex; gap:.4rem; align-items:center; flex-wrap:wrap;
+  }
+  .qcap__hint {
+    color: var(--text-muted); font-size:.62rem;
+  }
+  .qcap__submit {
+    margin-left:auto;
+    background: var(--accent, #4aa3df); color:#fff;
+    border:none; border-radius:4px;
+    padding:.25rem .65rem; cursor:pointer;
+    font-size:.72rem; font-weight:600;
+  }
+  .qcap__submit:hover { filter: brightness(1.1); }
+
+  /* Optional advanced fields — toggled by <details>; no JS. */
+  .qcap__advanced { margin-top:.45rem; }
+  .qcap__advanced summary {
+    cursor:pointer; color: var(--text-muted); font-size:.66rem;
+    list-style: revert;
+  }
+  .qcap__advanced summary:hover { color: var(--accent, #4aa3df); }
+  .qcap__advanced[open] summary { color: var(--text-secondary); }
+  .qcap__field {
+    display:flex; gap:.4rem; align-items:center; margin-top:.3rem;
+  }
+  .qcap__label {
+    font-size:.6rem; color: var(--text-muted); text-transform:uppercase;
+    letter-spacing:.05em; min-width:62px;
+  }
+  .qcap__input {
+    flex:1; font-size:.72rem;
+    background: rgba(0,0,0,.18); color: var(--text-primary);
+    border:1px solid var(--bg-raised); border-radius:3px;
+    padding:.18rem .4rem;
+  }
+  .qcap__input:focus { outline:none; border-color: var(--accent, #4aa3df); }
+</style>
+
+  <div class="qcap__hints">
+    <span>
+      {% if action %}
+        Capturing for <strong>{{ action.title }}</strong>
+      {% elif finding %}
+        Capturing for <strong>{{ finding.title }}</strong>
+      {% elif objective_text %}
+        Capturing for <strong>{{ objective_text }}</strong>
+      {% else %}
+        Quick capture
+      {% endif %}
+      {% if evidence_goals %}
+        · expects: {{ evidence_goals[:2]|join(' · ') }}{% if evidence_goals|length > 2 %} …{% endif %}
+      {% endif %}
+    </span>
+    <button class="qcap__close" type="button"
+            onclick="this.closest('.qcap').remove()"
+            title="Cancel">✕</button>
+  </div>
+
+  <form class="qcap__row"
+        hx-post="/api/v1/validation/workspace/investigations/{{ investigation_id }}/evidence/capture"
+        hx-target="closest .qcap"
+        hx-swap="outerHTML">
+
+    <input type="hidden" name="finding_id"    value="{{ finding_id or '' }}">
+    <input type="hidden" name="action_id"     value="{{ action_id or '' }}">
+    <input type="hidden" name="objective_key" value="{{ objective_key or '' }}">
+
+    <textarea class="qcap__textarea" name="content"
+              placeholder="Paste evidence (HTTP response, payload, terminal output) or write a note…"></textarea>
+
+    {# Type override — pure HTML radio strip. Default `auto` lets the
+       server choose; explicit chips lock the operator's intent. #}
+    <div class="qcap__types" role="radiogroup" aria-label="Evidence type">
+      <input class="qcap__type-radio" type="radio" id="qt-auto-{{ finding_id or 'anon' }}-{{ action_id or 'plain' }}"
+             name="artifact_type" value="auto" checked>
+      <label class="qcap__type-label qcap__type-label--auto"
+             for="qt-auto-{{ finding_id or 'anon' }}-{{ action_id or 'plain' }}">Auto-detect</label>
+
+      <input class="qcap__type-radio" type="radio" id="qt-note-{{ finding_id or 'anon' }}-{{ action_id or 'plain' }}"
+             name="artifact_type" value="note">
+      <label class="qcap__type-label"
+             for="qt-note-{{ finding_id or 'anon' }}-{{ action_id or 'plain' }}">Note</label>
+
+      <input class="qcap__type-radio" type="radio" id="qt-http-{{ finding_id or 'anon' }}-{{ action_id or 'plain' }}"
+             name="artifact_type" value="http_response">
+      <label class="qcap__type-label"
+             for="qt-http-{{ finding_id or 'anon' }}-{{ action_id or 'plain' }}">HTTP response</label>
+
+      <input class="qcap__type-radio" type="radio" id="qt-pay-{{ finding_id or 'anon' }}-{{ action_id or 'plain' }}"
+             name="artifact_type" value="payload_attempt">
+      <label class="qcap__type-label"
+             for="qt-pay-{{ finding_id or 'anon' }}-{{ action_id or 'plain' }}">Payload</label>
+
+      <input class="qcap__type-radio" type="radio" id="qt-term-{{ finding_id or 'anon' }}-{{ action_id or 'plain' }}"
+             name="artifact_type" value="terminal_output">
+      <label class="qcap__type-label"
+             for="qt-term-{{ finding_id or 'anon' }}-{{ action_id or 'plain' }}">Terminal output</label>
+    </div>
+
+    <div class="qcap__actions">
+      <span class="qcap__hint">Type is detected on submit. Pick a chip to override.</span>
+      <button class="qcap__submit" type="submit">⬡ Capture</button>
+    </div>
+
+    {# Progressive disclosure — title + notes for the rare case the operator
+       wants explicit control. The <details> element is pure HTML; no JS. #}
+    <details class="qcap__advanced">
+      <summary>More options</summary>
+      <div class="qcap__field">
+        <span class="qcap__label">Title</span>
+        <input class="qcap__input" type="text" name="title"
+               placeholder="auto-derived from first line if blank">
+      </div>
+      <div class="qcap__field">
+        <span class="qcap__label">Notes</span>
+        <input class="qcap__input" type="text" name="description"
+               placeholder="optional one-line context">
+      </div>
+    </details>
+  </form>
+</div>

@@ -1,0 +1,661 @@
+# CLAUDE.md — ai-assist-tool
+
+## Project
+
+Security investigation workbench. FastAPI + Jinja + htmx + Preact +
+React Flow. Operator profile: IT specialist running a data center.
+Targets: PortSwigger labs, local DVWA/Metasploitable, future
+infrastructure pentests.
+
+Repo: /home/unctad/projects/ai-assist-tool/
+No git. Operator accepts catastrophic-loss risk.
+Transcripts: /mnt/transcripts/
+
+## Reference scenario
+
+Canonical design test case. Used to evaluate whether system
+capabilities at each stage match operator workflow expectations.
+Future PRs reference this scenario when answering "does this design
+help or hurt the locked exploitation roadmap?"
+
+**Target characteristics:**
+- HTTP service with login page (web frontend)
+- Login authenticates through API endpoint (e.g., POST /api/login)
+- Telnet service exposed on port 23
+- Telnet service has a vulnerability allowing arbitrary write to an
+  auth-affecting data store (the specific syntax is unusual; not
+  covered by nuclei templates or nmap NSE scripts)
+
+**Exploit chain (operator's goal):**
+- Step 1: Connect to telnet, send write command adding operator's
+  credentials with admin=true flag
+- Step 2: Use those credentials to login via /api/login
+- Step 3: Receive admin session, achieve admin access
+
+**Why this scenario:**
+- Cross-protocol (telnet + HTTP) — tests multi-step orchestration
+- Operator-knowledge-dependent — system doesn't have the technique
+  in training data; operator brings it
+- Multi-step chain (write then auth) — tests V2.5 loop and dynamic
+  spawning
+- Tests V1.7 filtering: the telnet finding + API finding must surface
+  as validated, not buried under low-ROI noise
+- Tests V2.7+ knowledge accumulation: once solved, the chain should
+  be captured for future similar targets
+
+**System behavior across stages:**
+
+| Stage | What system does | What operator does |
+|-------|------------------|-------------------|
+| V1.6 | Recon finds telnet service, login form, API endpoints | Reviews recon output |
+| V1.7 | Enumeration re-invokes engines to verify findings, filters low-ROI, marks validated/dropped/incomplete | Reviews curated validated findings in clean UI |
+| V2 | Universal exploit template available; operator manually constructs chain | Knows the technique, fills template manually |
+| V2.1 | Qwen offers single suggestion when asked | Asks Qwen, evaluates, accepts or falls back to manual |
+| V2.2 | Admin UI shows feedback aggregation | Reviews aggregated feedback periodically |
+| V2.5 | Qwen orchestrates multi-step chain in loop, can spawn probes dynamically | Provides specific knowledge ("here's the telnet syntax") when Qwen asks |
+| V2.7 | Successful chain stored in vault | Operator does normal work; vault captures in background |
+| V2.8 | Next similar target: Qwen suggests this chain immediately from vault retrieval | Verifies suggestion, executes |
+| V2.9 | Vault curation UI available | Reviews vault, marks lab-specific vs generalizable, edits/deletes |
+| V3 | Qwen prompts refined based on V2.2 aggregated feedback | Reviews feedback periodically, hand-edits version-controlled prompts |
+
+**Key principles this scenario enforces:**
+
+- Operator brings unusual exploit knowledge. System never invents
+  techniques.
+- Multiple stages progressively reduce operator workload, not
+  eliminate operator involvement.
+- Knowledge accumulates across investigations via vault, owned by
+  operator.
+- Enumeration's job is to surface the actionable telnet + API
+  combination as prioritized validated findings, not bury them under
+  bare service detection noise.
+- Cross-protocol chains require multi-step orchestration (V2.5
+  onward).
+- System acceleration depends on V1.7 producing clean, prioritized
+  inputs for V2.
+
+## Architecture (LOCKED — do not deviate without explicit operator approval)
+
+Three-level orchestration:
+
+- **Level 3 — Conductor.** Top coordinator. Knows nothing about
+  individual engines. Receives operator intent, emits investigation-
+  level events.
+- **FilterOrchestrator (V1.7)** — runs after recon phase, applies rules to recon findings, sets validation_status. Two-pass: first pass applies REGISTERED_RULES (drop → validate → incomplete); second pass fires REINVOCATION_RULES, dispatches engine re-invocations (deduped), re-filters new findings. Rules can signal evidence_gap (RuleResult.evidence_gap) when they would classify a finding but required evidence field is absent. FilterOrchestrator records this in enumeration_block_reason; finding stays pending; admin /admin/enumeration-gaps panel aggregates gaps so operator can decide whether to enrich recon engines. Rules in apps/conductor/rules/ are Python functions.
+- **Level 2 — Five Domain Orchestrators.** Each owns one concern:
+  - Phase Orchestrator — state machine, phase transitions (Recon →
+    Enumeration → Exploitation)
+  - Execution Orchestrator — engine lifecycle, dispatch, concurrency
+    policy
+  - Findings Orchestrator — single ingress, translation, dedup,
+    correlation
+  - Chain Orchestrator — next_actions chains, depth limits, gates
+  - Session Orchestrator — _API_AUTH_STORE, rate limiting, target
+    type detection
+- **Level 1 — Engines.** Stateless. Conform to a strict Engine
+  interface (run, cancel, health_check, capabilities). Engines never
+  talk to each other; all coordination flows through orchestrators.
+
+End-state direction (after orchestration foundation):
+
+- Universal exploitation template + Qwen suggester (V2 / V2.1)
+- Operator drives car; never sees engine names in UI
+- Session inheritance from _API_AUTH_STORE non-negotiable — engines
+  never re-authenticate
+- No lab-specific code, ever
+- Frontend operator UI + separate backend admin UI at /admin/* on
+  same port 8000, no auth (single-operator local tool)
+- Enumeration reduces exploit's attack surface to only high-ROI
+  targets. Findings recon produced get filtered: validated (pass to
+  exploit), dropped (verified dead end, hidden from UI by default),
+  or incomplete (pass to exploit with gap description for V2 Qwen
+  collaboration). Bloated exploitation = wasted operator time.
+  Enumeration's job is curation, not discovery.
+- Enumeration probes are bounded by recon's scope. Enumeration can
+  do targeted probing (wordlist-driven path enumeration within a
+  recon-found API, parameter probing on recon-found forms) but never
+  broad re-discovery. Recon casts the wide net. Enumeration verifies
+  what recon found.
+- Long-term: RAG knowledge accumulation from completed investigations
+  (knowledge vault dormant code is the planned ingestion target).
+  Successful exploit chains, finding patterns, and target
+  characteristics get embedded and retrieved on-demand to provide
+  Qwen with relevant past context. Embedding model and vector DB
+  run locally; knowledge stays owned by operator, not the model.
+- Long-term: Manual prompt refinement based on operator feedback.
+  Qwen suggestions get thumbs up/down + outcome tracking; aggregated
+  feedback is reviewed periodically by operator; system prompts are
+  version-controlled and refined by hand. NOT automated prompt
+  optimization — operator stays in the loop, knowledge stays
+  explainable.
+
+## Hard-learned lessons
+
+- Audits underestimate scope ~3x consistently.
+- Big PRs hide regressions (V1.4a → 13 regressions). Bounded PRs
+  with verification between each.
+- Static "PASS" reports diverge from operator reality. Live
+  verification > static checks.
+- Architecture-first prevents engine explosion. Wire nothing until
+  Conductor + orchestrators in place.
+- Documentation-first prevents context loss across Claude Code
+  restarts. Every PR updates relevant .md files.
+- Operator inherited a substantial dormant stack (nmap, nuclei, ZAP,
+  Metasploit RPC, validation plugins, CVE matcher, knowledge vault).
+  Activate, do not duplicate.
+- Aggregation whitelist gap surfaces silently. When engines produce
+  new finding_type values, the findings exist in the DB but render
+  as "No findings yet" because _build_aggregations has a hardcoded
+  whitelist. Add catch-all card to cover any unhandled finding_type;
+  do not rely on the whitelist being exhaustive.
+- Security controls should fail-closed by default. Original PR D
+  gate filter used try/except KeyError: pass which silently let
+  engines run when their gate_id wasn't registered. Wrong direction.
+  Flipped to fail-closed in PR D-cleanup: unknown gate_id = engine
+  BLOCKED, with explicit logging. Startup validation now refuses to
+  register engines with bad gate_id so mismatches surface immediately
+  instead of at dispatch time.
+- FindingEvent schema must carry producer identity. Adding engines
+  without ensuring the persistence layer preserves probe_id /
+  source_scanner causes silent attribution loss. The bug was
+  invisible to operator UI (which aggregates by finding_type) but
+  corrupts any source-based queries. Field additions to event schemas
+  need a downstream-write audit.
+- Default values in production wiring are not always safe.
+  max_chain_depth=0 looked defensive (no runaway recursion) but
+  silently disabled the entire Chain Orchestrator path. Defaults
+  intended to be conservative-safe should be reviewed when
+  downstream consumers (chain dispatch logic) are added.
+  Defense-in-depth design: Phase Orchestrator also dispatches
+  plugins, so depth=0 didn't show as "no plugin findings" — it
+  showed as "plugins probe wrong ports."
+- Adapters drift silently from the tool they wrap. nuclei_adapter.py
+  was written for v2 (used -json flag); nuclei v3.3.5 removed that
+  flag; subprocess exited code 2; adapter never checked returncode;
+  returned 0 findings as "success". Three compounding failures:
+  (1) no returncode check, (2) wrong CLI flag, (3) no integration
+  test against the real binary. Lesson: adapters must check
+  returncode != 0, use -jsonl-export (not -json -o) for v3, and have
+  subprocess integration tests that run against the real binary in CI.
+  Flag changes in security tools are not announced loudly — validate
+  adapters whenever the tool version changes in the Dockerfile.
+- ZAP adapter bit-rot found in PR F audit. Two compounding failures:
+  (1) `from sdk import Logger` — sdk was a project-internal package
+  that no longer exists; adapter silently crashed on import (replaced
+  with stdlib logging). (2) Spider result URL list: old adapter used
+  `_run_spider()` which returned a count (int) not the URL list; the
+  new module-level function correctly calls `spider/view/results/`
+  and returns the actual URL list. Lesson: when wrapping HTTP APIs,
+  audit the full API call chain end-to-end — partial rewrites that
+  fix the call structure but miss the response parsing silently drop
+  all results. ZAP active scan was in-scope in the old adapter but
+  OUT OF SCOPE for PR F — it belongs to the exploitation phase.
+- Placeholder next_actions accumulate as dead code. nmap was
+  emitting cve_lookup next_actions on every service_detected finding,
+  but the CVE matcher chain was explicitly dropped (see EXPLICITLY
+  DROPPED). Dead next_actions waste Chain Orchestrator cycles and
+  pollute the finding record. When a planned chain is dropped, also
+  remove its next_action emission from the engine. Same applies to
+  capabilities.finding_types: port_open was declared on nmap but
+  never emitted (nmap emits service_detected). Capabilities must
+  reflect what the engine actually produces, not what was originally
+  planned.
+- Heartbeat watchdog policy must account for engine resource cost.
+  Subprocess engines (nuclei, nmap, ZAP) run a blocking subprocess
+  call inside `await run_scan()`. The heartbeat is updated before
+  the call and after it returns — so during a long scan, the
+  heartbeat goes stale. With a flat 30s threshold, nuclei was killed
+  at 30s while still scanning (subprocess still running). Fix:
+  differentiate threshold by engine.capabilities.resource_cost —
+  heavy engines get _HUNG_THRESHOLD_HEAVY=600s, light/medium get
+  _HUNG_THRESHOLD_LIGHT=30s. Any engine whose run() can take >30s
+  must declare resource_cost="heavy" in its capabilities.
+- Gap surfacing is informational, not corrective. enumeration_block_reason
+  captures "rule wanted to classify but couldn't because evidence field
+  missing." Admin /admin/enumeration-gaps panel shows aggregated counts.
+  System does NOT automatically enrich recon engines (locked principle from
+  V1.7 design). Operator reviews aggregated gaps, decides whether to ship a
+  recon enrichment PR for engine X to add field Y. This keeps the operator
+  driving the car — system surfaces gaps, doesn't paper over them.
+- Build configuration files silently replaced twice in one session
+  (CLAUDE.md during PR G, then deployment/docker/Dockerfile +
+  docker-compose.yml + pyproject.toml + core/api/app.py at 16:50:25 on
+  2026-05-25 — all four files written at the exact same second by a single
+  tool operation). Root cause confirmed by mtime analysis: all four
+  replacement timestamps match to the millisecond. Mechanism: a Claude Code
+  subagent or Write operation targeting the factory scaffold (core/, sdk/)
+  also wrote factory-default versions of the build config files as part of
+  the same operation. The files/ directory (protected originals from 2026-05-13)
+  survived untouched and was the source-of-truth for recovery. Mitigation:
+  (1) files/ directory serves as canonical protected backup — never delete or
+  modify files/Dockerfile, files/docker-compose.yml, files/pyproject.toml,
+  files/app.py without operator direction; (2) after any session involving
+  subagents or broad file writes, stat the 4 build files and compare mtimes
+  against files/ before running docker compose build; (3) the core/ and sdk/
+  factory scaffold directories cannot be safely removed yet — sdk/ is imported
+  throughout apps/ via "from sdk import Logger"; core/ is the application
+  entrypoint. Cleanup requires replacing sdk.Logger with stdlib logging across
+  all consumers first.
+- Version pin widening during reconstruction broke the frontend. During PR
+  RECOVERY, fastapi was pinned to <1.0.0 instead of files/pyproject.toml's
+  <0.112.0. pip resolved to FastAPI 0.136.3 which requires starlette 1.1.0.
+  Starlette 1.1.0 changed TemplateResponse signature from
+  TemplateResponse(name, context) to TemplateResponse(request, name, context).
+  App code uses the old signature — jinja2 received the context dict as the
+  template name and crashed with "unhashable type: dict". Fix: restore the
+  tight upper bounds from files/pyproject.toml exactly. Rule: when
+  reconstructing pyproject.toml, copy version pins verbatim from files/
+  backup — do NOT widen them. Upper bounds in this project are not
+  conservative hedging; they are hard compatibility gates.
+- FilterOrchestrator DB writer must target the validation DB, not the
+  conductor's orchestration DB. _validation_update and _block_reason_update
+  in conductor.py were wired with a closure over _db_path which resolves to
+  data/orchestration.db — the conductor's own DB. normalized_findings table
+  lives only in /app/data/validation.db. The UPDATEs silently no-oped for
+  the entire V1.7 feature set before live verification caught it. Fix: import
+  DB_PATH from apps.validation.database inside the closure instead of using
+  the closure-captured conductor db_path. Pattern to remember: any DB writer
+  callback wired into FilterOrchestrator must open validation.db, not any
+  other DB the caller happens to hold.
+- FilterOrchestrator timing must account for chain-dispatched enumeration
+  engines. Running FilterOrchestrator after recon phase completes misses
+  findings emitted by auth_recon, api_recon, and sqli_recon — they are
+  chain-dispatched during enumeration and finish after recon. FilterOrchestrator
+  must run after enumeration phase so all chain-dispatched findings have
+  arrived. The two-pass design (first pass + reinvocation dispatch + second
+  pass) is only meaningful when the pool of findings is complete.
+
+## Current status
+
+- V1.5 — landed (sequential phased execution, 3 UI bugs fixed)
+- V1.6 PR0 — landed (id, confidence, next_actions added to
+  FindingEvent; finding_id.py generator created)
+- V1.6 PR1 — drafted but NOT shipped. Superseded by orchestration
+  redesign.
+- V1.6 redirected mid-flight: orchestration architecture rewrite
+  before any engine activation work.
+- Dormant stack inventoried (see docs/audits/dormant-capabilities-
+  inventory.md if present).
+- V1.6 design doc — landed (docs/architecture/orchestration.md)
+- V1.6 PR A — landed (Conductor + 5 orchestrators + Engine ABC + mock engine + minimal flow verified)
+- V1.6 design doc revision — landed (3 gap fixes: phase completion gating, chain depth + cycle detection, engine asyncio rule)
+- V1.6 PR A.1 — landed (backend admin UI at /admin/* with Conductor and Execution panels, read-only, htmx polling)
+- V1.6 PR B — landed (passive_probe wrapped as PassiveProbeEngine; StorageBridge routes findings to existing persist path; feature flag CONDUCTOR_PARALLEL_TRACK=true routes passive_probe via Conductor while wellknown/fingerprint/cors stay on existing path; default OFF; 7/7 tests pass, 0 regressions)
+- V1.6 PR B + B.1 — landed (all 5 bootstrap probes wrapped as engines; CONDUCTOR_PARALLEL_TRACK=true; LIVE PARITY VERIFIED on real lab after fixing 3 wiring bugs: missing investigation_completed event, missing PhasedRun completion fields, and polling window not opened during parallel-track investigation)
+- V1.6 PR C — landed (nmap engine activated; runs only against local/private targets; produces service_detected findings in Recon phase; CVE chain placeholder declared in next_actions pending follow-up PR; target_classification.py consolidated as shared module; SessionOrchestrator delegates to it)
+- V1.6 PR C.1 — landed (gate registry at apps/conductor/gates.py; nmap_external_scan gate default OFF — nmap skips EXTERNAL unless gate ON; Settings panel at /admin/settings with htmx toggle buttons; nav updated; 87/87 tests pass, 2 skipped, 0 regressions)
+- V1.6 PR D.0 — landed (wordlist foundation: canonical data/wordlists/ tree, registry module at apps.conductor.wordlists with ID-based lookup and format-aware loading; existing consumers migrated; 96/96 tests pass, 2 skipped, 0 regressions)
+- V1.6 PR D — landed (7 validation plugins wrapped as Conductor Engines: ssh, telnet, smb, wordpress, drupal, apache, nginx; 7 visibility gates default OFF; nmap _translate_output emits per-service plugin next_actions with service_info; Chain gate filter + service_info passthrough to dispatch_engine; Execution + Phase orchestrators apply same gate filter so expected count matches dispatched count; plugin_base.py shared base; 26 new tests; 109/110 pass, 2 skipped, 1 pre-existing pydantic failure, 0 regressions)
+- V1.6 PR D-fix — landed (Bug A: catch-all card in _build_aggregations for any finding_type not in the whitelist — aggregations.py extracted as pure testable module; Bug B: lifecycle_fn callback in runtime.py _run_all_probes_via_conductor closes ScanExecution row to COMPLETED/FAILED with actual findings_count after Conductor investigation_completed event; 10 new tests: 6 aggregation + 4 lifecycle; 119/120 pass, 2 skipped, 0 regressions)
+- V1.6 PR D-cleanup — landed (gate filter fail-closed at all 3 sites: Execution, Phase, Chain orchestrators; startup validation refuses to register engines with unknown gate_id; 5 new tests; 124/125 pass, 2 skipped, 0 regressions)
+- V1.6 PR D-fix-2 — landed (source_scanner attribution fixed: FindingEvent now carries source_scanner field, StorageBridge populates it from emitted probe_id, _persist preserves it via evt.source_scanner or "passive_probe"; max_chain_depth bumped from 0 to 3 so Chain Orchestrator next_actions actually fire in production; plugin engines now receive correct service_info from nmap-discovered ports when chain-dispatched; 8 verification tests updated/added; 132/133 pass, 2 skipped, 0 regressions)
+- V1.6 PR E — landed (nuclei engine activated; wraps dormant NucleiAdapter; 5 severity gates: nuclei_severity_info/low default ON, medium/high/critical default OFF; multi-gate visibility: engine appears iff ANY severity gate ON; gate_ids tuple replaces single gate_id on multi-gate engines; engine_is_visible() helper extracted to gates.py, used by all 3 orchestrators; startup validation updated to check gate_ids tuples; nmap HTTP/HTTPS chain now includes nuclei; nuclei runs in enumeration phase at 300s timeout; 14 new tests (10 nuclei + 4 multi-gate); 146/147 pass, 2 skipped, 0 regressions)
+- V1.6 PR E-fix — landed (nuclei adapter rewritten for v3.3.5; root cause: `-json` flag removed in nuclei v3.3.5, adapter used it, subprocess exited code 2 silently, 0 findings reported as "success"; fix: module-level run_scan() using -jsonl-export flag + exit code check + TimeoutError handling; NucleiAdapter class retained for backward compat; nuclei_profiles.py dead code removed; engine updated to call run_scan() directly; gate-driven severity list replaces hardcoded adapter default; 15 new tests (10 adapter unit + 5 engine e2e); tests/scanner_orchestration/ package created with importlib-based conftest to bypass pydantic cascade; 161/162 pass, 2 skipped, 0 regressions)
+- V1.6 PR F — landed (ZAP engine activated: spider + passive scan; 2 gates zap_spider/zap_passive_scan default OFF; multi-gate visibility reused from PR E; run_spider() + run_passive_scan() module-level functions replace old ZAPAdapter methods; ZAPAdapter class retained for backward compat; old sdk.Logger import removed, standard logging used; spider URL list bug fixed (was returning int count instead of URL list); zap added to nmap HTTP/HTTPS chain; emits zap_endpoint_discovered + zap_alert finding types; active scan OUT OF SCOPE (exploitation phase); 23 new tests (13 engine + 10 adapter); 184/185 pass, 2 skipped, 0 regressions; live verification: 33 ZAP findings in DB with gates ON, 0 with gates OFF)
+- V1.7 PR H — landed (schema additions: validation_status, validation_reason, enumeration_gaps, validated_at, superseded_by on normalized_findings; FilterOrchestrator at apps/conductor/orchestrators/filter.py wired into _run_phases after recon phase completes; initial rule set in apps/conductor/rules/: 6 drop rules, 5 validate-as-is rules, 6 incomplete rules; Python-based first-match-wins evaluation (drop → validate → incomplete); optional db_writer callback wired via wire_db_writer(); 46 new tests (10 orchestrator + 10 drop + 13 validate + 13 incomplete); 229 pass, 6 skipped, 0 regressions)
+- V1.6 PR G — landed (evidence enrichment: api_recon hit_paths list[dict{path,status_code,content_type}], sqli_recon detected_login_endpoints list[dict{path,status_code,method}], cmdi_recon form_inputs list[dict{name,type}] in observations, telnet connection_error field {refused/timeout/reset/other}; dead code: cve_lookup next_actions removed from nmap, port_open removed from nmap capabilities.finding_types, parity.py + test_engine_parity_all.py deleted; nuclei watchdog fix: _HUNG_THRESHOLD differentiated to _HUNG_THRESHOLD_LIGHT=30s (light/medium) and _HUNG_THRESHOLD_HEAVY=600s (heavy — nmap, nuclei, zap); aggregations.py + suggestions/probes.py backward-compat for old flat-list DB records; 18 new tests (10 evidence shape + 5 watchdog calibration + 3 parity removal guards); 183 pass, 6 skipped, 0 regressions)
+- V1.7 PR I — landed (engine re-invocation wiring + auth_required enrichment: candidate_paths param on 4 bootstrap probes (sqli/cmdi/auth/api recon) overrides default path list when provided; sqli evidence now includes auth_required=True when all detected login endpoints returned 401/403; nmap evidence carries nse_results dict keyed by script id; plugin_base stores self._config before _run_checks so SSH wordlist_id and WordPress wp_base_path pass-through work; nuclei adapter accepts templates list (omits -severity when present) and tags list (-tags flag); ZAP run_spider accepts start_url, run_passive_scan accepts scope_url; ReinvocationRequest dataclass in rules/base.py; REINVOCATION_RULES list (8 rules) in rules/reinvocation_rules.py; FilterOrchestrator two-pass: _collect_reinvocations + _dedup_requests + second-pass on new findings; wire_reinvocation_dispatcher() wired in conductor.py to exec_orch.dispatch_engine; 111 new tests across 11 new test files; 294 pass, 6 skipped, 0 regressions)
+- V1.7 PR J — landed (operator UI + admin gap aggregation + evidence_gap pipeline: RuleResult.evidence_gap() classmethod signals missing evidence without stopping rule chain; is_evidence_gap bool on RuleResult; FilterOrchestrator _evaluate() returns 4-tuple (status, reason, gaps, block_reason) — evidence_gap records block_reason, chain continues; wire_block_reason_writer() on FilterOrchestrator; enumeration_block_reason TEXT column added to normalized_findings (idempotent migration); NormalizedFindingRepository.update_block_reason + map_validation_status + list_enumeration_gaps added; conductor.py wires _validation_update and _block_reason_update callbacks (lazy aiosqlite imports); ValidateHighRiskZapAlert returns evidence_gap when risk field absent; ValidateServiceDetectedWithVersion returns evidence_gap when service_version empty; IncompleteApiExposureAuthUnknown returns evidence_gap when hit_paths missing or old flat-string format; workspace-data.json adds include_dropped=false query param + validation_counts field; _dominant_validation() helper in aggregations.py; all aggregation cards carry validation_status/validation_reason/enumeration_gaps; admin /admin/enumeration-gaps panel (list_enumeration_gaps aggregation, table template, nav link in base.html); workspace.js: status badges (green/orange/grey), gap descriptions, wsToggleDropped toggle; toggle buttons in investigation_workspace.html Recon + Enumeration panes; 19 new tests (5 block_reason + 11 validation_rendering + 3skip gaps_panel) + 2 existing tests updated; 313 pass, 11 skipped, 0 regressions. V1.7 feature-complete pending live verification.)
+- PR RECOVERY — landed (deployment/docker/Dockerfile, docker-compose.yml, pyproject.toml, core/api/app.py reconstructed after silent factory-template replacement at 16:50:25 on 2026-05-25; all four files were written at the same second by a single tool operation; application code in apps/ untouched throughout; reconstruction sources: files/Dockerfile, files/docker-compose.yml, files/pyproject.toml protected backups + orphan container inspection for ZAP/metasploit commands + CLAUDE.md for nuclei v3.3.5 + build.log traceback proving validation_router in core/api/app.py line 19 + operator confirmation of admin_router; two build fixes applied post-reconstruction: setuptools.build_meta replacing legacy backend, weasyprint Pango system libs added to apt-get; post-build fix: fastapi pin tightened back to <0.112.0 + uvicorn to <0.30.0 after overly-wide <1.0.0 pins allowed FastAPI 0.136.3 + starlette 1.1.0 to install, breaking TemplateResponse API; all 3 services up and healthy; FastAPI 0.111.1 + starlette 0.37.2 confirmed in container; /api/v1/validation/discovery returns 200; nuclei v3.3.5 confirmed; V1.7 schema 6/6 columns present; /admin/conductor and /admin/enumeration-gaps return HTML)
+- PR K — landed (V1.7 bugfix: three root causes why all findings stayed pending after live verification; CRITICAL DB writer fix: _validation_update and _block_reason_update in conductor.py were connecting to orchestration.db via captured _db_path — normalized_findings table does not exist there, all UPDATEs silently failed; fix imports DB_PATH from apps.validation.database and connects to validation.db instead; timing fix: FilterOrchestrator invocation moved from after recon phase to after enumeration phase so chain-dispatched enumeration engines (auth_recon, api_recon, sqli_recon) finish emitting before filtering begins; rule coverage: ValidateSqliEndpointsFound added (sqli + non-empty endpoints + auth_required=False → validated), ValidateApiExposureAccessible added (api_exposure + 200-only hits + no 401/403 → validated); 19 total rules (was 17); 14 new tests across 4 files; 329 pass, 11 skipped, 0 regressions)
+- PR L — landed (CRITICAL: one-line fix in _persist (routes.py) to pass evt.id as finding_id to NormalizedFinding — eliminates two-parallel-ID-systems bug that silently broke FilterOrchestrator UPDATEs since PR B; without fix, NormalizedFinding defaulted to uuid4() while FilterOrchestrator used fnd_xxx IDs, so every UPDATE matched 0 rows; CRITICAL test confirmed FAIL before fix, PASS after; new test directory tests/conductor/_patterns/ embeds session bug pattern catalog with 19 regression tests across 7 pattern files covering: ID round-trip, attribution preservation, default safety, adapter contract, consumer existence, resource policy, DB target consistency; 348 pass, 11 skipped, 0 regressions)
+
+## Delivery sequence (next)
+
+**V1.7 — COMPLETE (pending live re-verification after PR K)**
+
+All V1.7 PRs shipped:
+- PR G — pre-V1.7 cleanup (evidence enrichment, dead code removal, nuclei watchdog fix) — landed
+- PR H — schema additions + FilterOrchestrator skeleton + initial 17 rules — landed
+- PR I — engine re-invocation wiring + auth_required enrichment — landed
+- PR J — operator UI + admin gap aggregation + evidence_gap pipeline — landed
+- PR K — DB writer target fix + FilterOrchestrator timing fix + 2 new validate rules — landed
+
+LIVE RE-VERIFICATION GATE: run investigation against 192.168.200.202 or PortSwigger lab after
+PR K lands. Expect mixed validation_status breakdown (validated/dropped/incomplete/pending),
+NOT all-pending. Confirm status badges appear in operator UI. Inspect /admin/enumeration-gaps
+for any surfaced evidence gaps. Confirm dropped findings hidden by default.
+
+**V1.7 closeout (after live verification passes):**
+
+- V1.7 comprehensive audit at docs/audits/v1.7-enumeration-output-inventory.md
+- All finding types across all engines (post-re-invocation)
+- Exploitation infrastructure inventory (dormant code worth wiring in V2)
+- Drop candidates (lab-specific or narrow-scope code to remove before V2)
+- Evaluation of finding shapes against Reference scenario needs
+- Recommendations for V2 architecture based on V1.7 outputs
+- What additional evidence fields recon engines need to capture for
+  V1.7 rules to function
+
+**V2 — EXPLOITATION (deferred, direction locked)**
+
+- V2: Universal exploit template (manual fill, no LLM yet; backend
+  route + frontend form, session inheritance from _API_AUTH_STORE,
+  refactor pure-mutation probes onto it)
+- V2.1: Qwen single-shot suggester via Ollama at localhost:11434
+  (operator intent → Qwen suggestion → operator review → execute;
+  ships with thumbs up/down feedback buttons from day one)
+- V2.2: Feedback aggregation view in backend admin UI
+  (per-prompt-version accept/reject rates)
+- V2.5: Qwen loop + dynamic probe spawning (stuck detection,
+  operator-provided paths/credentials/context on demand, auth
+  orchestration via Qwen, full chain orchestration)
+- V2.7: Knowledge vault activated as RAG ingestion source (embed
+  completed investigations; ChromaDB embedded + nomic-embed-text
+  via Ollama; no cloud calls)
+- V2.8: RAG retrieval injection into Qwen prompts (top-K similar
+  past chains included as context on every Qwen call)
+- V2.9: Vault curation UI in backend admin (view/edit/delete vault
+  entries, mark canonical vs deprecated)
+- V3: Manual prompt refinement cadence (operator reviews aggregated
+  feedback, refines system prompts, version-bumps; prompts in
+  apps/conductor/prompts/qwen/, version-controlled, operator-edited)
+- V4+: TBD based on what's working
+
+**EXPLICITLY DROPPED (do not implement)**
+
+- CVE matcher chain. Dormant infrastructure (cves table,
+  cve_watchlist, nvd_sync code, validation/engines/cve_matcher.py)
+  stays in DB and codebase — parked, not wired, recoverable.
+  Reason for drop: reference/annotation work rather than action work;
+  medium-ROI compared to enumeration depth (V1.7); not worth a
+  PR cycle at this stage.
+
+**EXPLICITLY DEFERRED (not in V1.6 or V1.7)**
+
+- ZAP active scan — exploitation-phase work (sends payloads;
+  operator-armed semantics needed first); belongs in V2 alongside
+  Metasploit
+- AJAX spider in ZAP — defer until regular spider proves insufficient
+- Catalog mapping (finding_type → exploit category) — exploit
+  categories themselves get defined in V2 exploitation design;
+  mapping is downstream of that decision
+- Tag-based filtering in nuclei — defer until severity filtering
+  proves insufficient
+
+## Design notes for distant work
+
+Notes for V2.7+ planning. These do NOT need to be implemented until
+that stage but are documented now so design choices made in
+intervening PRs don't accidentally box them out.
+
+- **Knowledge vault dormant code MUST NOT be deleted.** It is the
+  planned ingestion target for V2.7 RAG work. Per dormant
+  capabilities audit, it lives in apps/investigation_core/exports/
+  and exporters/. Keep parked.
+- **Conductor audit log is the RAG source of truth.** Every
+  orchestrator event already carries a correlation_id per design
+  doc. This is exactly what RAG needs to trace "this finding led to
+  this exploit which solved this lab." Maintain this discipline.
+- **Findings schema is RAG-ready.** Current fields (id, next_actions,
+  evidence, related_findings, confidence) cover what
+  embedding/retrieval needs. No schema changes anticipated for V2.7.
+- **Local-first RAG stack.** ChromaDB embedded (no separate service),
+  nomic-embed-text via Ollama (already running). No cloud calls.
+  Operator owns all data.
+- **Prompt versioning lives in version-controlled files.** System
+  prompts go in apps/conductor/prompts/qwen/v1.md, v2.md, etc.
+  Operator-edited, not auto-generated.
+- **Wordlist registry pattern.** Wordlists live under data/wordlists/
+  in three categories (credentials, paths, payloads). Engines request
+  wordlists by ID via apps.conductor.wordlists.load_entries. New
+  wordlists registered by adding to REGISTERED_WORDLISTS in
+  apps/conductor/wordlists.py. Format-aware loader handles yaml, csv,
+  txt transparently. Note: config/credentials/ssh_defaults.yaml and
+  probe/wordlists/default-passwords.csv remain in place (referenced by
+  files/ssh.py and auth_recon.py respectively — not updated in D.0).
+- **Catalog mapping deferred.** New finding types (service_detected,
+  vulnerability_confirmed, vulnerability_assessed,
+  verbose_banner_disclosed, waf_cdn_detected,
+  http_methods_advertised) currently fall into Uncategorized sidebar
+  bucket. This is INTENTIONAL until exploitation phase design is
+  locked. Forcing recon/enum findings into exploit-focused categories
+  (Misconfig, Infrastructure Exposure, etc.) before that design is
+  settled would conflate enumeration with exploitation. Uncategorized
+  + catch-all cards (from PR D-fix) provide full visibility;
+  categorization is a polish concern for later.
+  **CONSTRAINT: The Exploitation sidebar showing "Uncategorized: N"
+  (N > 0) during recon/enum-only investigations is the correct
+  intermediate state. Do NOT treat this as a bug. Do NOT "fix" it
+  by forcing recon/enum finding types into exploit-focused
+  categories. Findings are already visible to the operator via
+  catch-all cards. Categorization decisions are deferred until
+  exploitation logic is designed.**
+- **Uncategorized as intentional state.** The Exploitation sidebar's
+  Uncategorized bucket reflects "findings exist, exploitation pathway
+  not yet designed." During recon/enum-focused PRs, this bucket will
+  be non-empty and that's correct. Do not force categorization of
+  recon/enum findings into exploit-focused categories before
+  exploitation phase design is locked — it conflates discovery with
+  exploitation and locks in bad UX. Uncategorized + catch-all cards
+  provide full visibility; that's enough until exploitation logic
+  exists.
+- **max_chain_depth tuning.** Currently set to 3 in
+  _run_all_probes_via_conductor. Future PRs adding deeper chain
+  trees (CVE matcher → exploit suggester → operator-armed exec)
+  may need higher. Watch for cases where legitimate chains hit the
+  depth cap — that's the signal to raise it. Watch for runaway
+  behavior — that's the signal something's pointing back at itself.
+- **Multi-gate engine pattern (PR E).** Engines that have severity
+  tiers or other dimensions where visibility depends on ANY of N gates
+  use `gate_ids: tuple[str, ...]` instead of single `gate_id: str`.
+  The `engine_is_visible(engine)` helper in gates.py handles both.
+  An engine declaring BOTH gate_id and gate_ids is fail-closed —
+  this is intentional: misconfigured engines are blocked, not
+  visible. Never set both attributes on an engine class.
+- **Adapter responsibility boundary (PR E-fix).** Adapters are thin
+  subprocess/HTTP wrappers only. They own: CLI flag construction,
+  exit code check, output parsing, timeout handling, HTTP call
+  construction. They do NOT own: scope/policy (which severities to
+  scan, which templates to use, which scan types to run), feature
+  gates, or profile systems. The engine layer owns scope and passes
+  it down via config. If an adapter has hardcoded severities or
+  profiles, that's a design violation. nuclei_adapter.py is the
+  canonical example: engine computes active_severities from gate
+  state, passes them as config["severity"]; adapter uses them
+  verbatim. zap_adapter.py follows the same split: engine layer
+  decides whether to call run_spider() vs run_passive_scan() based
+  on gate state; adapter functions are unconditional — they run when
+  called.
+- **ZAP active scan deferred (PR F decision).** ZAP spider + passive
+  scan are enumeration-phase work (read-only, observe traffic).
+  Active scan (fuzzing, injection testing) is exploitation-phase work
+  and belongs in a later PR alongside Metasploit and exploitation
+  template work. Do NOT add active scan to zap_engine.py without
+  explicit operator approval and a matching exploitation-phase design.
+- **Three-outcome enumeration model (V1.7).** V1.7 introduces
+  validation_status on findings with three values: validated (verified
+  worth exploit's time), dropped (verified dead end, hidden from
+  operator UI by default), incomplete (worth exploit's time but
+  missing data; carries enumeration_gaps array describing what's
+  missing). The "incomplete" status is the handoff point for V2.x
+  Qwen collaboration — exploitation can show the gap to operator via
+  Qwen, get input, retry validation.
+- **Enumeration gap surfacing (NOT auto-enrichment).** When an
+  enumeration rule needs a field that's absent from recon's evidence,
+  the finding is marked enumeration_blocked with
+  enumeration_block_reason. System surfaces aggregated gaps in admin
+  UI ("Top recon gaps: passive_probe missing content_type — 18
+  findings blocked"). Operator decides whether to enrich recon (small
+  PR to add the field to a recon engine) or adjust the enumeration
+  rule. System does NOT automatically modify recon engines or trigger
+  recon re-runs. Operator drives car.
+- **Filtered findings retained in DB.** Dropped findings are NOT
+  deleted — they stay in normalized_findings with
+  validation_status='dropped'. Hidden from operator UI default view,
+  accessible via a "show filtered" toggle. Reasons: audit trail when
+  filter seems too aggressive; debuggability when investigation
+  behavior is unexpected; recovery if filter rules later change and
+  previously-dropped findings become relevant.
+- **Rule storage as Python code, not YAML.** V1.7 rules are implemented as Python functions in apps/conductor/rules/. Reasons: rule logic composes conditions and helpers cleanly in code; YAML adds loader + validator + expression evaluator complexity without operator benefit at this stage; operator does not edit rules in production (refinement happens via code-level PRs). If operator workflow later demands live rule editing, migration to YAML is viable but not required now.
+- **Recon evidence is typed-list shaped, not flat-list shaped.**
+  V1.7 filtering rules depend on per-item metadata (status_code,
+  content_type, method, input type). api_recon hit_paths, sqli_recon
+  detected_login_endpoints, and cmdi_recon form_inputs are now
+  list[dict] not list[str]. Consumers that read these fields
+  (aggregations.py, suggestions/probes.py) use isinstance(x, dict)
+  guards for backward compat with old flat-list DB records. New
+  engines and rules must write and expect the typed shape. Do not
+  regress to flat lists.
+- **UI design discipline for status badges (V1.7 PR J).** Per-finding
+  validation_status badges: validated=green, incomplete=orange/yellow,
+  dropped=grey, pending=no badge. Future statuses (e.g., V2 might add
+  "exploitable" or "exploit_attempted") should extend this palette
+  consistently. Keep badge text short (single word + count if applicable).
+  Gap descriptions for incomplete findings use human-readable labels mapped
+  from machine codes (csrf_token_needed → "CSRF token required"). Mapping
+  lives in workspace.js (GAP_LABELS constant). The dominant validation_status
+  for group cards (e.g., security_headers groups multiple findings) is
+  computed by _dominant_validation() in aggregations.py: all-dropped →
+  dropped; any-validated → validated; any-incomplete → incomplete; else pending.
+- **evidence_gap rule protocol (V1.7 PR J).** Rules return
+  RuleResult.evidence_gap(reason) when they would classify a finding but
+  required evidence is missing. This is NOT first-match-wins — the rule chain
+  continues. FilterOrchestrator records the reason in enumeration_block_reason.
+  Finding stays validation_status='pending'. If a later rule classifies, both
+  fields are set. evidence_gap is opt-in per rule — don't add it to every rule,
+  only where the absence of a field is meaningfully actionable by the operator.
+- **Pattern catalog as documentation and enforcement device (PR L).** The
+  tests/conductor/_patterns/ directory serves a dual role: the README.md is the
+  living catalog of architectural bug patterns (what went wrong, why, what the fix
+  was); the test_seam_*.py files are the enforcement layer (each pattern has at
+  least one test that would FAIL if the bug were reintroduced). Keeping them in
+  tests/ rather than docs/ means the catalog is run on every test suite invocation —
+  it cannot rot silently. When adding new seams (V2 prompt construction, RAG
+  retrieval, exploit execution chain), add a new test_seam_*.py for that seam before
+  shipping the code, not after the first bug surfaces. The pattern that caused the
+  most damage is always the most recent one.
+- **Factory scaffold cleanup deferred (core/ and sdk/).** The core/ and sdk/
+  directories at repo root are vestigial factory scaffolding. They CANNOT be
+  removed yet: sdk/ is imported throughout apps/ via "from sdk import Logger"
+  (apps/validation/services/metasploit.py, apps/validation/api/*, apps/scanner_
+  orchestration/*, and others); core/ is the application entrypoint (core/main.py
+  → core/api/app.py). Cleanup requires a dedicated PR to replace all sdk.Logger
+  usages with stdlib logging before sdk/ can be removed. Until that PR lands,
+  both directories are load-bearing. Do NOT delete them assuming they are inert.
+- **FilterOrchestrator runs after enumeration, not recon (PR K).** FilterOrchestrator
+  was originally wired to run after the recon phase. That was wrong: recon phase only
+  produces recon-engine findings (passive_probe, nmap). Chain-dispatched enumeration
+  engines (sqli_recon, auth_recon, api_recon, cmdi_recon, nuclei, zap, plugins) emit
+  their findings during the enumeration phase. Running FilterOrchestrator after enumeration
+  ensures the complete finding pool is available for both the first pass and the
+  reinvocation second pass. Do NOT move this back to after recon — the two-pass logic
+  depends on a complete pool, and the validate rules for sqli/api_exposure depend on
+  evidence fields that only enumeration engines produce.
+- **Two-parallel-ID-systems bug (PR L).** From PR B until PR L, findings had two
+  different IDs simultaneously: Conductor's deterministic fnd_xxx (16-char, generated by
+  generate_finding_id()) lived in memory; NormalizedFinding in the DB held a random UUID4
+  (default_factory=lambda: str(uuid4())) because _persist in routes.py never passed
+  finding_id=evt.id to the constructor. FilterOrchestrator UPDATE WHERE finding_id='fnd_xxx'
+  always matched 0 rows — silent failure for the entire V1.7 feature set. Eight PRs of
+  work accumulated on top of it. Fix: one line in _persist — finding_id=(evt.id or
+  str(uuid4())). Lesson: when data crosses between layers with their own ID generation,
+  write an explicit round-trip test that proves the ID survives the crossing. The test
+  must be written to FAIL against pre-fix code; a test that always passes proves nothing.
+- **Seam bugs evade mock-based unit tests.** Eight bugs in V1.6–V1.7 shared the same root
+  shape: mechanically valid code at each layer, silent mismatch at the seam between layers.
+  Mock tests verified each layer in isolation and passed. The bugs only surfaced during live
+  integration or DB inspection. Unit tests are insufficient for cross-layer contracts.
+  tests/conductor/_patterns/ introduces seam tests — tests that verify data crossing between
+  layers preserves identity, shape, and semantics. Patterns documented so far: Two-Parallel-
+  ID-Systems, Attribution Loss at Seam, Silently-Disabling Default, Adapter Shape Mismatch,
+  Dangling Reference, Resource-Class-Blind Policy, Wrong DB Target. As new architectural
+  seams are introduced (V2 prompt construction, RAG retrieval, exploit execution), add new
+  test_seam_*.py files to this directory.
+- **files/ directory is the canonical protected backup.** files/Dockerfile,
+  files/docker-compose.yml, files/pyproject.toml, files/app.py are the originals
+  from 2026-05-13. They are the recovery source if build config files are ever
+  replaced again. Do not modify files/ without operator direction. After any
+  session involving subagent operations or broad file writes, verify the 4 build
+  config files (deployment/docker/Dockerfile, docker-compose.yml, pyproject.toml,
+  core/api/app.py) have not been silently reverted by comparing their sizes/content
+  against the files/ backups before running docker compose build.
+
+## Gate registry
+
+Runtime feature gates at `apps/conductor/gates.py`. In-memory, reset on restart.
+Thread-safe (threading.Lock). Admin UI toggle at /admin/settings.
+
+| Gate ID                     | Default | Effect |
+|-----------------------------|---------|--------|
+| `nmap_external_scan`        | OFF     | When ON, nmap runs against EXTERNAL targets. When OFF, nmap only scans LOCAL/PRIVATE targets. |
+| `ssh_credential_testing`    | OFF     | SSH default-credential validation via paramiko. |
+| `telnet_credential_capture` | OFF     | Telnet cleartext-credential capture. |
+| `smb_null_session_enum`     | OFF     | SMB null-session enumeration via impacket. |
+| `wordpress_vuln_check`      | OFF     | WordPress vulnerability checks on HTTP services. |
+| `drupal_vuln_check`         | OFF     | Drupal vulnerability checks on HTTP services. |
+| `apache_misconfig_check`    | OFF     | Apache misconfiguration checks on HTTP services. |
+| `nginx_misconfig_check`     | OFF     | Nginx misconfiguration checks on HTTP services. |
+| `nuclei_severity_info`      | **ON**  | Run nuclei templates at info severity. |
+| `nuclei_severity_low`       | **ON**  | Run nuclei templates at low severity. |
+| `nuclei_severity_medium`    | OFF     | Run nuclei templates at medium severity. |
+| `nuclei_severity_high`      | OFF     | Run nuclei templates at high severity. |
+| `nuclei_severity_critical`  | OFF     | Run nuclei templates at critical severity. |
+| `zap_passive_scan`          | OFF     | ZAP passive scan: analyze observed HTTP traffic for alerts (headers, cookies, info disclosure). Read-only, no payloads. Run after spider for best coverage. |
+| `zap_spider`                | OFF     | ZAP spider: crawl target to discover URLs, forms, parameters. Generates HTTP traffic visible in access logs. |
+
+Multi-gate engines (nuclei, zap): visible iff ANY gate in gate_ids is ON. Single-gate engines: visible iff the one gate is ON. Both gate_id and gate_ids → fail-closed.
+
+Use `get_gate(gate_id)`, `set_gate(gate_id, bool)`, `list_gates()`, `reset_all_gates_to_defaults()`, `engine_is_visible(engine)`.
+
+## Feature flags
+
+- `CONDUCTOR_PARALLEL_TRACK` (env var, default `false`): when `true`,
+  ALL bootstrap probes (passive_probe, sqli_recon, cmdi_recon,
+  auth_recon, api_recon) dispatch via Conductor + Execution Orchestrator.
+  All other probes (wellknown, fingerprint, cors) remain on the existing
+  path (not yet wrapped). Will be removed after live parity gate clears
+  and Conductor path becomes default.
+  Toggle: set `CONDUCTOR_PARALLEL_TRACK=true` in `.env` or shell.
+
+## Live parity gate — PASSED
+
+Completed against PortSwigger lab. Three wiring bugs found and fixed:
+1. Conductor `_run_phases()` never emitted `investigation_completed` to
+   the bus (PhaseOrchestrator emitted it, Conductor did not — added
+   Conductor-level emission + `investigation_failed` for exception path).
+2. `_run_all_probes_via_conductor` in runtime.py never populated
+   `PhasedRun.completed_at`, `recon_run`, or `enumeration_run` stubs
+   (added stub PhaseRun population after `done.wait()` resolves).
+3. PhaseRun stubs were created post-completion with `completed_at`
+   already set, so `is_recon_active()` returned False throughout the
+   entire parallel-track run (frontend polling stopped after first
+   poll; finding cards never appeared until hard refresh). Fixed by
+   creating `recon_run` stub with `completed_at=None` BEFORE
+   `conductor.start_investigation()`, then mutating `completed_at`
+   after `done.wait()` resolves.
+
+Parity confirmed: flag OFF and flag ON produce matching findings on
+real lab. Admin UI shows investigation in RECON_RUNNING during run and
+disappears on completion (expected — COMPLETED is filtered from active
+list). Ready for PR C.
+
+## Operator preferences
+
+- Senior engineer voice. Direct, concise, technically accurate.
+  Push back on weak ideas.
+- No git ceremony — repo has no git.
+- Small fix = small prompt. Don't add scope not requested.
+- No Playwright / screenshots / CLAUDE.md ceremony in prompts unless
+  asked.
+- Reviewer pushback is often overridden by operator — execute locked
+  decisions, don't re-litigate.
+
+## Documentation discipline (MANDATORY)
+
+Every Claude Code prompt must end by updating relevant .md files so
+future sessions have current context. The canonical files:
+
+- CLAUDE.md — top-level project context, locked decisions, current
+  status. Update when status, locked decisions, or delivery sequence
+  changes.
+- docs/architecture/orchestration.md — architecture design doc.
+  Update when architecture decisions change.
+- docs/audits/*.md — audit reports. Static once written; do not
+  modify retroactively. Create new audit files when running new
+  audits.
+
+Do not create new .md files outside docs/architecture/, docs/audits/,
+or repo root, without explicit operator request.
+
+Do not modify README or CHANGELOG without explicit operator request.

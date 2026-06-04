@@ -1,0 +1,9 @@
+{% extends "admin/base.html" %}
+{% block content %}
+<h1>Execution Orchestrator</h1>
+<div hx-get="/admin/execution/refresh"
+     hx-trigger="every 2s"
+     hx-swap="innerHTML">
+  {% include "admin/_execution_table.html" %}
+</div>
+{% endblock %}

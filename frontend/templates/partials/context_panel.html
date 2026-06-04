@@ -1,0 +1,279 @@
+{# Phase 38 — Execution-centric context panel.
+
+  Loaded into #inv-panel-body when operator clicks Expand on a topology
+  node. The panel shows what the SYSTEM knows about this branch — why it
+  exists, what executing has produced, what comes next — NOT a tutorial.
+
+  Tutorial UX (numbered steps, evidence capture forms, capture-snapshot,
+  mark-regression) is moved to the .dev-only block at the bottom so deep
+  debug mode still has it available.
+
+  Context (from context_panel route):
+    investigation_id   (str)
+    node               (BranchNode)
+    action             (GuidedAction | None)
+    approval           (ActionApproval | None)
+    action_evidence    (list[EvidenceArtifact])
+    evidence_count     (int)
+    success_indicators (list[str])
+    approval_status    (str: 'none' | 'pending' | 'approved' | 'completed' | 'rejected')
+    is_action          (bool)
+    outcome_summary    (str)        — derived from approval state + indicators
+    outcome_kind       (str: 'pending' | 'running' | 'verified' | 'rejected')
+    next_branches      (list[{node_id,label,status,kind}])
+    related_findings   (list[{node_id,label,kind,status}])
+    confidence_glyph   (str)
+    confidence_label   (str)
+#}
+
+<div class="space-y-3 text-[#1f2328] text-xs">
+
+  {# ── Branch header — title + observation ──────────────────────── #}
+  <div>
+    <div class="text-zinc-500 uppercase text-[10px] tracking-wide mb-0.5">{{ node.kind.value }}</div>
+    <div class="text-sm font-semibold text-[#1f2328]">{{ node.label }}</div>
+    {% if node.detail %}
+      <div class="text-zinc-500 mt-0.5">{{ node.detail }}</div>
+    {% endif %}
+  </div>
+
+  {# ── System reasoning — kept for non-action nodes (findings, milestones).
+       Action nodes prefer operational runtime output once a run exists. #}
+  {% if node.narrative and not has_run %}
+  <div>
+    <div class="text-zinc-500 uppercase text-[10px] tracking-wide mb-0.5">Why this branch exists</div>
+    <div class="text-[#656d76] leading-relaxed">{{ node.narrative }}</div>
+  </div>
+  {% endif %}
+
+  {# ── Live runtime: stages currently running or just finished ───── #}
+  {% if has_run and runtime_stages %}
+  <div>
+    <div class="text-zinc-500 uppercase text-[10px] tracking-wide mb-0.5">Runtime</div>
+    <ul class="space-y-0.5 font-mono text-[11px]">
+      {% for s in runtime_stages %}
+        <li class="flex items-start gap-1.5">
+          {% if s.complete %}
+            <span class="text-[#1a7f37]">✓</span>
+            <span class="text-[#1f2328]">{{ s.label }}</span>
+          {% else %}
+            <span class="text-amber-700 inline-block" style="animation: invSuggestedPulse 1.2s ease-in-out infinite;">▸</span>
+            <span class="text-amber-700">{{ s.label }}</span>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {# ── Live runtime: result lines (operator output, not explanation) #}
+  {% if has_run and runtime_results %}
+  <div>
+    <div class="text-zinc-500 uppercase text-[10px] tracking-wide mb-0.5">Results</div>
+    <ul class="space-y-0.5 font-mono text-[11px]">
+      {% for r in runtime_results %}
+        <li class="flex items-start gap-1.5">
+          {% if r.kind == 'blocked' %}
+            <span class="text-[#1a7f37]">✓</span>
+            <span class="text-[#1a7f37]">{{ r.label }}</span>
+          {% elif r.kind == 'persists' %}
+            <span class="text-red-600">!</span>
+            <span class="text-red-600">{{ r.label }}</span>
+          {% elif r.kind == 'detected' %}
+            <span class="text-[#0969da]">◆</span>
+            <span class="text-[#0969da]">{{ r.label }}</span>
+          {% else %}
+            <span class="text-[#656d76]">·</span>
+            <span class="text-[#1f2328]">{{ r.label }}</span>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {# ── Confidence (when applicable) ─────────────────────────────── #}
+  {% if confidence_glyph %}
+  <div class="flex items-center gap-2">
+    <span class="text-[11px] text-zinc-500 uppercase tracking-wide">Confidence</span>
+    <span class="text-[#1f2328]">{{ confidence_glyph }} {{ confidence_label }}</span>
+  </div>
+  {% endif %}
+
+  {# ── Execution outcome (post-approval state) ───────────────────── #}
+  {% if outcome_kind != 'pending' %}
+  <div class="rounded-md border border-[#d0d7de] px-2 py-1.5 bg-[#f6f8fa]">
+    <div class="text-zinc-500 uppercase text-[10px] tracking-wide mb-0.5">Outcome</div>
+    {% if outcome_kind == 'verified' %}
+      <div class="text-[#1a7f37]">✓ {{ outcome_summary }}</div>
+    {% elif outcome_kind == 'running' %}
+      <div class="text-amber-700">↻ {{ outcome_summary }}</div>
+    {% elif outcome_kind == 'rejected' %}
+      <div class="text-red-600">✕ {{ outcome_summary }}</div>
+    {% endif %}
+    {% if evidence_count %}
+      <div class="text-[10px] text-zinc-500 mt-0.5">{{ evidence_count }} evidence artifact{% if evidence_count != 1 %}s{% endif %} captured</div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {# Phase 59b — "Approve" affordance removed. Real actions execute via
+     the suggestions list below; the canned branch-action/approve route
+     is gone. #}
+
+  {# ── Phase C-2 — Selection card (three zones: finding context, ranked
+       technique list, result zone). Replaces the old automated/guidance
+       suggestion sections when SELECTION_CARD_ENABLED = True.
+       Set SELECTION_CARD_ENABLED = False in constants.py to roll back
+       to the legacy ghost-card rendering below. #}
+  {% if selection_card_enabled %}
+    {% include "partials/_selection_card.html" %}
+  {% else %}
+  {# ── Phase 59b — legacy: Suggested next actions, split into two sections.
+       AUTOMATED ACTIONS: real probe-backed entries with Execute buttons.
+       MANUAL INVESTIGATION PATHS: guidance_only entries with no buttons.
+       Either section omitted when empty so headers don't render alone. #}
+  {% if automated_suggestions %}
+  <div class="pt-1">
+    <div class="text-zinc-500 uppercase text-[10px] tracking-wide mb-1">
+      Automated actions
+    </div>
+    <div class="space-y-1.5">
+      {% for s in automated_suggestions %}
+        <div class="rounded-md border border-[#d0d7de] hover:border-[#1f2328] transition-colors p-2">
+          <div class="flex items-start justify-between gap-2">
+            <div class="flex-1 min-w-0">
+              <div class="text-[#1f2328] text-[12px] font-medium truncate">{{ s.label }}</div>
+              <div class="text-zinc-500 text-[10px] mt-0.5">{{ s.reasoning }}</div>
+            </div>
+            {% if s.executed %}
+            <span class="shrink-0 text-[11px] text-zinc-500 font-mono">✓ executed</span>
+            {% else %}
+            <button
+              class="shrink-0 rounded bg-blue-600 hover:bg-blue-500 px-2 py-0.5 text-[11px] text-white font-medium"
+              hx-post="/api/v1/validation/workspace/investigations/{{ investigation_id }}/finding/{{ finding_id }}/suggest/{{ s.action_kind }}/execute"
+              hx-swap="none"
+              hx-on::after-request="window.dispatchEvent(new CustomEvent('inv-topology-refresh'));">
+              Execute →
+            </button>
+            {% endif %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if guidance_suggestions %}
+  <div class="pt-1">
+    <div class="text-zinc-500 uppercase text-[10px] tracking-wide mb-1">
+      Manual investigation paths
+    </div>
+    <div class="space-y-1.5">
+      {% for s in guidance_suggestions %}
+        <div class="rounded-md border border-amber-300 bg-amber-50 p-2">
+          <div class="flex items-start justify-between gap-2">
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-1.5 mb-0.5">
+                <span class="text-amber-700 text-[11px] shrink-0" title="Not automated — operator runs manually">ⓘ</span>
+                <div class="text-[#1f2328] text-[12px] font-medium truncate">{{ s.label }}</div>
+                <span class="text-[9px] px-1 py-0.5 rounded bg-amber-100 text-amber-700 shrink-0">
+                  Not automated
+                </span>
+              </div>
+              <div class="text-[#656d76] text-[10px] leading-relaxed">{{ s.reasoning }}</div>
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+  {% endif %}{# /selection_card_enabled #}
+
+  {# ── Generated next branches — what this node spawned ───────── #}
+  {% if next_branches %}
+  <div>
+    <div class="text-zinc-500 uppercase text-[10px] tracking-wide mb-1">Generated branches</div>
+    <ul class="space-y-0.5">
+      {% for nb in next_branches %}
+        <li class="flex items-center gap-1.5 text-[#1f2328]">
+          <span class="inline-block w-1 h-1 rounded-full
+            {% if nb.status == 'running' %}bg-amber-400
+            {% elif nb.status == 'completed' %}bg-emerald-400
+            {% elif nb.status == 'failed' %}bg-red-400
+            {% else %}bg-zinc-500{% endif %}"></span>
+          <span class="truncate">{{ nb.label }}</span>
+        </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {# ── Related findings — other nodes on the same finding ──────── #}
+  {% if related_findings %}
+  <div>
+    <div class="text-zinc-500 uppercase text-[10px] tracking-wide mb-1">Related findings</div>
+    <ul class="space-y-0.5 text-[#656d76]">
+      {% for rf in related_findings %}
+        <li class="truncate">· {{ rf.label }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {# ────────────────────────────────────────────────────────────────
+     DEEP DEBUG / DETAIL MODE — only visible with dev mode toggled on
+     in the sidebar. The tutorial/walkthrough/snapshot controls live
+     here so they remain reachable without polluting the primary
+     execution-centric flow.
+  ──────────────────────────────────────────────────────────────── #}
+  {% if action and (approval_status == 'approved' or approval_status == 'completed') %}
+  <div class="dev-only pt-2 mt-2 border-t border-zinc-800 space-y-2">
+    <div class="text-zinc-600 uppercase text-[9px] tracking-wider">Deep debug</div>
+
+    {% if action.steps %}
+    <details>
+      <summary class="cursor-pointer text-zinc-500 text-[10px]">Walkthrough steps ({{ action.steps|length }})</summary>
+      <ol class="mt-1 ml-4 list-decimal text-zinc-500 space-y-1 text-[11px]">
+        {% for step in action.steps %}
+          <li>
+            {{ step.instruction }}
+            {% if step.example %}
+              <code class="block mt-0.5 px-1.5 py-0.5 bg-zinc-900 rounded text-[10px] text-emerald-300/70">{{ step.example }}</code>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ol>
+    </details>
+    {% endif %}
+
+    <details>
+      <summary class="cursor-pointer text-zinc-500 text-[10px]">Capture evidence (manual)</summary>
+      <div hx-get="/api/v1/validation/workspace/investigations/{{ investigation_id }}/evidence/capture/form?guided_action_id={{ action.action_id }}"
+           hx-trigger="toggle from:closest details once"
+           hx-swap="innerHTML">
+        <div class="text-zinc-600 text-[10px]">Loading…</div>
+      </div>
+    </details>
+
+    {% if action.is_defensive and approval_status == 'completed' %}
+    <div class="flex gap-2">
+      <button class="rounded-md border border-zinc-700 hover:border-zinc-500 px-2 py-0.5 text-[10px] text-zinc-400"
+        hx-post="/api/v1/validation/workspace/investigations/{{ investigation_id }}/branch-action/{{ action.action_id }}/capture-snapshot?kind=post_remediation"
+        hx-swap="none"
+        hx-on::after-request="window.dispatchEvent(new CustomEvent('inv-topology-refresh'))">
+        Capture snapshot
+      </button>
+      <button class="rounded-md border border-red-800 hover:border-red-600 px-2 py-0.5 text-[10px] text-red-400"
+        hx-post="/api/v1/validation/workspace/investigations/{{ investigation_id }}/branch-action/{{ action.action_id }}/mark-regression"
+        hx-swap="none"
+        hx-on::after-request="window.dispatchEvent(new CustomEvent('inv-topology-refresh'))">
+        Mark regression
+      </button>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+</div>

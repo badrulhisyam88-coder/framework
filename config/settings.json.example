@@ -1,0 +1,4 @@
+{
+  "llm_model": "hf.co/gabriellarson/Foundation-Sec-8B-Instruct-GGUF:Q4_K_M",
+  "embed_model": "nomic-embed-text"
+}

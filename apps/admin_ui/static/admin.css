@@ -1,0 +1,24 @@
+body { font-family: system-ui, sans-serif; margin: 0; }
+nav { background: #222; color: white; padding: 12px 20px; }
+nav a { color: white; margin-right: 20px; text-decoration: none; }
+nav a:hover { text-decoration: underline; }
+nav .env { float: right; color: #f80; font-size: 12px; text-transform: uppercase; }
+main { padding: 20px; }
+h1 { margin-top: 0; }
+table { border-collapse: collapse; width: 100%; margin-bottom: 24px; }
+th, td { padding: 6px 10px; border: 1px solid #ddd; text-align: left; }
+th { background: #f5f5f5; }
+.state-RECON_RUNNING, .state-ENUM_RUNNING, .state-EXPLOIT_RUNNING { color: #0a0; font-weight: bold; }
+.state-COMPLETED { color: #888; }
+.state-CANCELLED { color: #c80; }
+.state-FAILED { color: #c00; font-weight: bold; }
+.health-healthy { color: #0a0; }
+.health-slow { color: #c80; }
+.health-hung { color: #c00; font-weight: bold; }
+.health-crashed { color: #c00; font-weight: bold; }
+.health-idle { color: #888; }
+.last-updated { color: #888; font-size: 11px; margin-top: 8px; }
+.gate-on { color: #0a0; font-weight: bold; }
+.gate-off { color: #888; }
+.gate-default { color: #aaa; font-size: 12px; }
+.gate-toggle { cursor: pointer; padding: 3px 10px; border: 1px solid #ccc; border-radius: 3px; background: #f5f5f5; }

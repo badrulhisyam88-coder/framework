@@ -1,0 +1,70 @@
+{#
+  Partial: campaign_timeline.html
+  Multi-investigation chronological narrative.
+  Context: snapshot, campaign_id, stage_labels
+#}
+<div class="ct-panel">
+  <div class="ct-header">
+    <span class="ct-title">Campaign timeline</span>
+    <span class="ct-meta mono">{{ snapshot.timeline | length }} event(s)</span>
+  </div>
+
+  {% if not snapshot.timeline %}
+    <div class="ct-empty">
+      No events yet. Attach investigations and progress milestones to build the storyline.
+    </div>
+  {% else %}
+  <ol class="ct-list">
+    {% for ev in snapshot.timeline %}
+    <li class="ct-event ct-event--{{ ev.event_type }}">
+      <div class="ct-event-row">
+        <span class="ct-event-icon">
+          {%- if ev.event_type == 'investigation_joined' -%}◆
+          {%- elif ev.event_type == 'guided_action_completed' -%}✓
+          {%- elif ev.event_type == 'knowledge_exported' -%}⬡
+          {%- elif ev.event_type == 'scan_completed' -%}▶
+          {%- else -%}·
+          {%- endif -%}
+        </span>
+        <span class="ct-event-summary">{{ ev.summary }}</span>
+        <span class="ct-event-ts mono">{{ ev.timestamp.strftime('%Y-%m-%d %H:%M') }}</span>
+      </div>
+      <div class="ct-event-meta">
+        {% if ev.investigation_title %}
+          <span class="ct-event-inv">{{ ev.investigation_title }}</span>
+        {% endif %}
+        {% if ev.stage %}
+          <span class="ct-event-stage">{{ stage_labels[ev.stage] }}</span>
+        {% endif %}
+      </div>
+    </li>
+    {% endfor %}
+  </ol>
+  {% endif %}
+</div>
+
+<style>
+.ct-panel { display: flex; flex-direction: column; gap: .4rem;
+            padding: .65rem .8rem; background: var(--bg-raised);
+            border: 1px solid var(--border); border-radius: 5px; }
+.ct-header { display: flex; justify-content: space-between; align-items: baseline;
+             padding-bottom: .3rem; border-bottom: 1px solid var(--border); }
+.ct-title { font-size: .8rem; font-weight: 600; }
+.ct-meta  { font-size: .62rem; color: var(--text-muted); }
+.ct-empty { font-size: .7rem; color: var(--text-muted); padding: 1rem 0;
+            text-align: center; font-style: italic; }
+.ct-list  { list-style: none; margin: 0; padding: 0; }
+.ct-event { padding: .3rem 0;
+            border-bottom: 1px dashed color-mix(in srgb, var(--border) 60%, transparent); }
+.ct-event:last-child { border-bottom: none; }
+.ct-event-row { display: flex; gap: .4rem; align-items: baseline; }
+.ct-event-icon { width: 1rem; text-align: center; flex-shrink: 0; font-size: .8rem; }
+.ct-event-summary { flex: 1; font-size: .72rem; }
+.ct-event-ts { font-size: .58rem; color: var(--text-muted); }
+.ct-event-meta { display: flex; gap: .5rem; padding-left: 1.4rem; margin-top: .1rem;
+                 font-size: .6rem; color: var(--text-muted); }
+.ct-event-inv   { color: var(--text-secondary); font-weight: 600; }
+.ct-event-stage { color: var(--accent); }
+.ct-event--investigation_joined .ct-event-summary  { color: var(--accent); }
+.ct-event--guided_action_completed .ct-event-summary { color: var(--low); }
+</style>

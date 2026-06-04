@@ -1,0 +1,99 @@
+{% extends "admin/base.html" %}
+{% block content %}
+<h1>Vault Inspector</h1>
+<p style="color:#666;font-size:0.9em;">
+  Admin tool — query the vault embedding index and see raw similarity scores.
+  ChromaDB collection: <code>vault_findings</code>, metric: <code>cosine</code>
+  (distance = 1 − similarity).
+</p>
+
+{# ── Section 1: Inspection Query ──────────────────────────────────────────── #}
+<h2>Inspection Query</h2>
+<form
+  hx-post="/admin/vault-inspect"
+  hx-target="#inspect-results"
+  hx-swap="innerHTML"
+  hx-indicator="#inspect-spinner"
+  style="margin-bottom:1rem;">
+
+  <table style="width:100%;max-width:640px;border-collapse:collapse;">
+    <tr>
+      <td style="padding:6px 12px 6px 0;white-space:nowrap;vertical-align:top;">
+        <label for="finding_type"><strong>Finding type</strong></label>
+      </td>
+      <td style="padding:6px 0;">
+        <input
+          id="finding_type"
+          name="finding_type"
+          type="text"
+          placeholder="e.g. login_form_detected"
+          style="width:100%;box-sizing:border-box;">
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:6px 12px 6px 0;white-space:nowrap;vertical-align:top;">
+        <label for="description"><strong>Description</strong></label>
+      </td>
+      <td style="padding:6px 0;">
+        <textarea
+          id="description"
+          name="description"
+          rows="3"
+          placeholder="e.g. Login form found at /login with username field"
+          style="width:100%;box-sizing:border-box;resize:vertical;"></textarea>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:6px 12px 6px 0;white-space:nowrap;vertical-align:top;">
+        <label for="top_k"><strong>Top-K</strong></label>
+      </td>
+      <td style="padding:6px 0;">
+        <input
+          id="top_k"
+          name="top_k"
+          type="number"
+          value="10"
+          min="1"
+          max="20"
+          style="width:80px;">
+        <span style="color:#888;font-size:0.85em;margin-left:6px;">max 20</span>
+      </td>
+    </tr>
+  </table>
+
+  <div style="margin-top:0.75rem;">
+    <button type="submit">Search Vault</button>
+    <span id="inspect-spinner" class="htmx-indicator" style="margin-left:0.5rem;color:#888;">
+      querying…
+    </span>
+  </div>
+</form>
+
+<div id="inspect-results" style="margin-top:1rem;">
+  <span style="color:#888;font-size:0.9em;">Results will appear here.</span>
+</div>
+
+{# ── Section 2: Dedup ──────────────────────────────────────────────────────── #}
+<h2 style="margin-top:3rem;">Dedup</h2>
+<p style="color:#666;font-size:0.9em;">
+  Finds pairs where cosine similarity &gt; 0.95 and removes the duplicate.
+  Concept files (CONCEPT- prefix) are always kept over non-concept files.
+  Removals are logged to <code>docs/bug-ledger.md</code>.
+  <strong>This action is permanent and cannot be undone.</strong>
+</p>
+<button
+  hx-post="/admin/vault-dedup"
+  hx-target="#dedup-results"
+  hx-swap="innerHTML"
+  hx-indicator="#dedup-spinner"
+  hx-confirm="This will permanently remove near-duplicate vault entries. Continue?">
+  Run Dedup
+</button>
+<span id="dedup-spinner" class="htmx-indicator" style="margin-left:0.5rem;color:#888;">
+  running…
+</span>
+
+<div id="dedup-results" style="margin-top:1rem;">
+  <span style="color:#888;font-size:0.9em;">Dedup results will appear here.</span>
+</div>
+{% endblock %}

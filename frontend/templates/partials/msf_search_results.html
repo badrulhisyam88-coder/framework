@@ -1,0 +1,34 @@
+{# Inputs: results = [{type, fullname, path, name, rank, disclosure_date, cves[], other_refs[]}], query: str #}
+{% if not results %}
+<p class="text-muted mono" style="font-size:11px;">
+    No modules matched <strong>{{ query }}</strong>.
+</p>
+<p class="text-muted" style="font-size:11px;">
+    Tip: search by CVE id (<code>CVE-2021-44228</code>), keyword (<code>wordpress xmlrpc</code>),
+    or msfconsole filters (<code>cve:2021-44228 type:exploit</code>,
+    <code>name:smb</code>, <code>platform:windows rank:excellent</code>).
+</p>
+{% else %}
+<p class="text-muted mono" style="font-size:11px;">
+    {{ results|length }} match{{ "" if results|length == 1 else "es" }} for
+    "<strong>{{ query }}</strong>"
+</p>
+{% for r in results %}
+<div class="msf-result-row"
+     onclick="loadMsfModule('{{ r.type }}', '{{ r.path }}')">
+    <div>
+        <span class="module-type">{{ r.type }}</span><span style="color:var(--text-primary);">{{ r.fullname }}</span>
+    </div>
+    {% if r.name %}
+    <div class="text-muted" style="font-size:11px; margin-top:2px;">{{ r.name }}</div>
+    {% endif %}
+    <div class="text-muted" style="font-size:10px; margin-top:2px; display:flex; gap:6px; flex-wrap:wrap;">
+        {% if r.rank %}<span>rank: <strong>{{ r.rank }}</strong></span>{% endif %}
+        {% if r.disclosure_date %}<span>disclosed: {{ r.disclosure_date }}</span>{% endif %}
+        {% for cve in r.cves %}
+        <span class="count-pill" style="font-size:10px;border-color:rgba(239,68,68,0.4);color:var(--critical);">{{ cve }}</span>
+        {% endfor %}
+    </div>
+</div>
+{% endfor %}
+{% endif %}

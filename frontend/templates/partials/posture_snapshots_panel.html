@@ -1,0 +1,109 @@
+{#
+  Partial: posture_snapshots_panel.html
+  Lists saved posture snapshots with capture controls and a compare form.
+
+  Context: investigation_id, snapshots, kind_labels
+#}
+<div class="ps-panel">
+  <div class="ps-header">
+    <span class="ps-title">Posture snapshots</span>
+    <span class="ps-meta mono">{{ snapshots | length }} captured</span>
+  </div>
+
+  <form class="ps-capture"
+        hx-post="/api/v1/validation/workspace/investigations/{{ investigation_id }}/posture-snapshots"
+        hx-target="#ps-capture-result" hx-swap="innerHTML">
+    <select class="ps-select" name="snapshot_kind">
+      {% for k, label in kind_labels.items() %}
+        <option value="{{ k }}">{{ label }}</option>
+      {% endfor %}
+    </select>
+    <input class="ps-input" type="text" name="label" placeholder="Label (e.g. 'after CSP rollout')">
+    <button class="btn btn-sm btn-primary" type="submit">⬢ Capture snapshot</button>
+  </form>
+  <div id="ps-capture-result"></div>
+
+  {% if snapshots %}
+  <form class="ps-compare"
+        hx-get="/api/v1/validation/workspace/investigations/{{ investigation_id }}/posture-snapshots/compare/partial"
+        hx-target="#ps-comparison-result" hx-swap="innerHTML">
+    <label class="ps-label">Compare</label>
+    <select class="ps-select" name="before" required>
+      <option value="" disabled selected>before…</option>
+      {% for s in snapshots %}
+        <option value="{{ s.snapshot_id }}">{{ s.label }} · {{ s.captured_at.strftime('%Y-%m-%d %H:%M') }}</option>
+      {% endfor %}
+    </select>
+    <span class="ps-arrow">→</span>
+    <select class="ps-select" name="after" required>
+      <option value="" disabled selected>after…</option>
+      {% for s in snapshots %}
+        <option value="{{ s.snapshot_id }}">{{ s.label }} · {{ s.captured_at.strftime('%Y-%m-%d %H:%M') }}</option>
+      {% endfor %}
+    </select>
+    <button class="btn btn-sm btn-secondary" type="submit">Compare</button>
+  </form>
+  <div id="ps-comparison-result"></div>
+  {% endif %}
+
+  {% if snapshots %}
+  <ul class="ps-list">
+    {% for s in snapshots %}
+    <li class="ps-row ps-row--{{ s.snapshot_kind }}">
+      <span class="ps-kind">{{ kind_labels[s.snapshot_kind] }}</span>
+      <span class="ps-row-label">{{ s.label }}</span>
+      <span class="ps-row-stats mono">
+        {{ s.findings_count }} finding(s) · eq {{ s.evidence_quality_score }}/100 · {{ s.active_themes | length }} theme(s)
+      </span>
+      <span class="ps-row-ts mono">{{ s.captured_at.strftime('%Y-%m-%d %H:%M') }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <div class="ps-empty">No snapshots yet — capture a baseline before remediation work begins.</div>
+  {% endif %}
+</div>
+
+<style>
+.ps-panel { display: flex; flex-direction: column; gap: .5rem;
+            padding: .65rem .8rem; background: var(--bg-raised);
+            border: 1px solid var(--border); border-radius: 5px; }
+.ps-header { display: flex; justify-content: space-between; align-items: baseline;
+             padding-bottom: .3rem; border-bottom: 1px solid var(--border); }
+.ps-title { font-size: .8rem; font-weight: 600; }
+.ps-meta  { font-size: .62rem; color: var(--text-muted); }
+
+.ps-capture, .ps-compare { display: flex; gap: .35rem; align-items: center;
+                            flex-wrap: wrap; }
+.ps-label { font-size: .65rem; color: var(--text-muted); font-weight: 600;
+             text-transform: uppercase; letter-spacing: .04em; }
+.ps-select, .ps-input {
+  font-size: .68rem; padding: .2rem .35rem;
+  background: var(--bg-raised); color: var(--text-primary);
+  border: 1px solid var(--border); border-radius: 3px;
+}
+.ps-input { flex: 1; min-width: 10rem; }
+.ps-arrow { color: var(--text-muted); }
+
+.ps-list { list-style: none; margin: 0; padding: 0; }
+.ps-row { display: flex; gap: .5rem; align-items: baseline; padding: .25rem 0;
+          border-bottom: 1px dashed color-mix(in srgb, var(--border) 60%, transparent);
+          font-size: .7rem; }
+.ps-row:last-child { border-bottom: none; }
+.ps-kind { font-size: .56rem; padding: 1px 6px; border-radius: 2px;
+           font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
+           background: color-mix(in srgb, var(--accent) 12%, var(--bg-raised));
+           border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--border));
+           color: var(--accent); min-width: 5.5rem; text-align: center; }
+.ps-row--post_remediation .ps-kind { background: color-mix(in srgb, var(--low) 14%, var(--bg-raised));
+                                      border-color: color-mix(in srgb, var(--low) 30%, var(--border));
+                                      color: var(--low); }
+.ps-row--regression_check .ps-kind { background: color-mix(in srgb, var(--medium) 14%, var(--bg-raised));
+                                       border-color: color-mix(in srgb, var(--medium) 30%, var(--border));
+                                       color: var(--medium); }
+.ps-row-label { flex: 1; font-weight: 600; }
+.ps-row-stats { color: var(--text-muted); font-size: .62rem; }
+.ps-row-ts    { font-size: .58rem; color: var(--text-muted); }
+.ps-empty     { font-size: .7rem; color: var(--text-muted); padding: .6rem 0;
+                 text-align: center; font-style: italic; }
+</style>

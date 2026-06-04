@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ title }}</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 2cm;
+            @bottom-right {
+                content: "Page " counter(page) " of " counter(pages);
+                font-size: 9pt;
+                color: #666;
+                font-family: 'Liberation Sans', Arial, sans-serif;
+            }
+            @bottom-left {
+                content: "{{ title }}";
+                font-size: 9pt;
+                color: #666;
+                font-family: 'Liberation Sans', Arial, sans-serif;
+            }
+        }
+
+        body {
+            font-family: 'Liberation Sans', Arial, sans-serif;
+            font-size: 10pt;
+            line-height: 1.45;
+            color: #1a1a1a;
+            margin: 0;
+            padding: 0;
+        }
+
+        h1, h2, h3, h4 { color: #111; margin: 0 0 8px 0; }
+        h1 { font-size: 26pt; letter-spacing: 1px; }
+        h2 { font-size: 16pt; }
+        h3 { font-size: 13pt; }
+        h4 { font-size: 11pt; margin-top: 12px; }
+        p { margin: 0 0 8px 0; }
+
+        .mono { font-family: 'Liberation Mono', 'Courier New', monospace; font-size: 9pt; }
+        .text-muted { color: #666; }
+        .small { font-size: 9pt; }
+        .page-break { page-break-before: always; }
+
+        .cover-page {
+            page-break-after: always;
+            text-align: center;
+            padding-top: 4cm;
+        }
+        .cover-page h1 { font-size: 32pt; font-weight: 700; letter-spacing: 2px; margin-bottom: 0; }
+        .cover-page h2 { font-size: 14pt; font-weight: 400; color: #555; margin-bottom: 3cm; }
+        .cover-page h3 { font-size: 18pt; margin-bottom: 1cm; }
+        .cover-page .cover-meta { margin-top: 2cm; font-size: 11pt; line-height: 2; }
+        .cover-page .cover-meta .label {
+            color: #666; display: inline-block;
+            min-width: 130px; text-align: right; padding-right: 12px;
+        }
+        .cover-page .badge-confidential {
+            margin-top: 4cm; display: inline-block;
+            padding: 8px 20px; border: 2px solid #c00; color: #c00;
+            font-weight: 700; font-size: 10pt; letter-spacing: 1px;
+        }
+
+        .section-title {
+            border-bottom: 2px solid #333;
+            padding-bottom: 6px;
+            margin: 0 0 16px 0;
+        }
+
+        table.metrics {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 12px 0 20px 0;
+        }
+        table.metrics td {
+            padding: 8px 10px;
+            border: 1px solid #ddd;
+            font-size: 10pt;
+        }
+        table.metrics .label { color: #555; width: 60%; }
+        table.metrics .value {
+            text-align: right;
+            font-weight: 700;
+            font-family: 'Liberation Mono', 'Courier New', monospace;
+        }
+
+        table.kv {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 8px 0 14px 0;
+            font-size: 9.5pt;
+        }
+        table.kv td {
+            padding: 6px 8px;
+            border: 1px solid #ddd;
+            vertical-align: top;
+        }
+        table.kv td.label {
+            background: #f5f5f5; color: #444;
+            width: 28%; font-weight: 600;
+        }
+
+        table.results {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 8px 0 14px 0;
+            font-size: 9pt;
+        }
+        table.results th, table.results td {
+            border: 1px solid #ddd;
+            padding: 5px 7px;
+            text-align: left;
+            vertical-align: top;
+        }
+        table.results th {
+            background: #f3f4f6;
+            font-weight: 700;
+            font-size: 8.5pt;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #333;
+        }
+        table.results td.mono {
+            font-family: 'Liberation Mono', 'Courier New', monospace;
+            font-size: 8.5pt;
+        }
+        table.results td.notes {
+            font-size: 8.5pt;
+            color: #444;
+        }
+
+        .severity-critical { color: #fff; background: #b91c1c; }
+        .severity-high     { color: #fff; background: #c2410c; }
+        .severity-medium   { color: #1a1a1a; background: #facc15; }
+        .severity-low      { color: #fff; background: #16a34a; }
+        .severity-info     { color: #fff; background: #6b7280; }
+
+        .severity-badge {
+            display: inline-block;
+            padding: 2px 10px;
+            font-size: 9pt;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            border-radius: 2px;
+        }
+
+        .status-vulnerable { color: #b91c1c; font-weight: 700; }
+        .status-safe { color: #166534; font-weight: 700; }
+        .status-unknown_version { color: #92400e; font-weight: 700; }
+        .status-not_applicable { color: #555; font-weight: 700; }
+
+        .recommendation {
+            background: #eef6ff;
+            border-left: 3px solid #2563eb;
+            padding: 8px 10px;
+            margin: 10px 0;
+            font-size: 9.5pt;
+        }
+        .recommendation h4 { margin: 0 0 4px 0; color: #1e3a8a; }
+        .recommendation ol, .recommendation ul {
+            margin: 4px 0 4px 18px;
+            padding: 0;
+        }
+
+        .finding-box {
+            border: 1px solid #ccc;
+            margin: 0 0 14px 0;
+            page-break-inside: avoid;
+        }
+        .finding-box .finding-header {
+            background: #b91c1c;
+            color: #fff;
+            padding: 8px 12px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .finding-box .finding-header .h-title {
+            font-size: 11pt; font-weight: 700;
+        }
+        .finding-box .finding-body { padding: 10px 12px; }
+
+        ul.refs { margin: 4px 0 4px 18px; padding: 0; font-size: 9pt; }
+        ul.refs li { margin: 2px 0; }
+        ul.refs a { color: #1e3a8a; text-decoration: none; word-break: break-all; }
+
+        code {
+            background: #f3f4f6;
+            padding: 1px 4px;
+            border-radius: 2px;
+            font-family: 'Liberation Mono', 'Courier New', monospace;
+            font-size: 9pt;
+        }
+    </style>
+</head>
+<body>
+
+    {# ==================== COVER PAGE ==================== #}
+    <div class="cover-page">
+        <h1>AI ASSIST TOOL</h1>
+        <h2>Custom Vulnerability Scan Report</h2>
+        <h3>{{ cve.cve_id }}</h3>
+        <div class="cover-meta">
+            <div><span class="label">Vulnerability:</span> {{ cve.title }}</div>
+            <div><span class="label">Severity:</span>
+                <span class="severity-badge severity-{{ cve.severity }}">{{ cve.severity }}</span>
+                &nbsp;CVSS {{ cve.cvss }}
+            </div>
+            <div><span class="label">Target range:</span> <span class="mono">{{ ip_range }}</span></div>
+            <div><span class="label">Ports scanned:</span> <span class="mono">{{ ports }}</span></div>
+            {% if prepared_by %}
+            <div><span class="label">Prepared by:</span> {{ prepared_by }}</div>
+            {% endif %}
+            <div><span class="label">Generated:</span>
+                {{ generated_at.strftime('%Y-%m-%d %H:%M UTC') }}
+            </div>
+        </div>
+        <div class="badge-confidential">CONFIDENTIAL — FOR INTERNAL USE ONLY</div>
+    </div>
+
+    {# ==================== EXECUTIVE SUMMARY ==================== #}
+    <div>
+        <h2 class="section-title">Executive Summary</h2>
+        <table class="metrics">
+            <tr>
+                <td class="label">IPs scanned</td>
+                <td class="value">{{ summary.total_ips or 0 }}</td>
+            </tr>
+            <tr>
+                <td class="label">Alive (responded on at least one port)</td>
+                <td class="value">{{ summary.alive or 0 }}</td>
+            </tr>
+            <tr>
+                <td class="label">Unreachable</td>
+                <td class="value">{{ summary.unreachable or 0 }}</td>
+            </tr>
+            <tr>
+                <td class="label">Vulnerable</td>
+                <td class="value status-vulnerable">{{ summary.vulnerable or 0 }}</td>
+            </tr>
+            <tr>
+                <td class="label">Safe (patched version)</td>
+                <td class="value status-safe">{{ summary.safe or 0 }}</td>
+            </tr>
+            <tr>
+                <td class="label">Unknown version (server header stripped)</td>
+                <td class="value status-unknown_version">{{ summary.unknown_version or 0 }}</td>
+            </tr>
+            <tr>
+                <td class="label">Not applicable (different product)</td>
+                <td class="value status-not_applicable">{{ summary.not_applicable or 0 }}</td>
+            </tr>
+            <tr>
+                <td class="label">Scan duration</td>
+                <td class="value">{{ "%.2f"|format(summary.duration_s or 0) }}s</td>
+            </tr>
+        </table>
+
+        {% if vulnerable %}
+        <div class="recommendation">
+            <h4>Action required</h4>
+            <p>{{ vulnerable|length }} host(s) returned a Server-header version inside the affected range.
+                Verify each one against the <em>actual running binary</em> before declaring an incident —
+                the version string can be misleading (see the verification section).</p>
+        </div>
+        {% else %}
+        <div class="recommendation">
+            <h4>No vulnerable hosts detected</h4>
+            <p>No host in the scanned range returned a vulnerable version. Note that hosts
+                with stripped Server headers ({{ summary.unknown_version or 0 }}) cannot be conclusively cleared
+                from this scan.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    {# ==================== CVE DETAILS ==================== #}
+    <div class="page-break">
+        <h2 class="section-title">CVE Details</h2>
+        <table class="kv">
+            <tr><td class="label">CVE ID</td><td class="mono">{{ cve.cve_id }}</td></tr>
+            <tr><td class="label">Title</td><td>{{ cve.title }}</td></tr>
+            <tr><td class="label">Affected product</td><td>{{ cve.product }}</td></tr>
+            <tr><td class="label">Severity</td>
+                <td><span class="severity-badge severity-{{ cve.severity }}">{{ cve.severity }}</span></td></tr>
+            <tr><td class="label">CVSS</td><td class="mono">{{ cve.cvss }}</td></tr>
+            <tr><td class="label">Affected range</td>
+                <td class="mono">{{ rule_introduced }} ≤ version &lt; {{ rule_fixed }}</td></tr>
+            <tr><td class="label">Fixed in</td><td class="mono">{{ rule_fixed }}</td></tr>
+            <tr><td class="label">Notes</td><td>{{ cve.notes }}</td></tr>
+        </table>
+
+        <h4>References</h4>
+        <ul class="refs">
+            {% for ref in cve.references %}
+            <li><a href="{{ ref }}">{{ ref }}</a></li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    {# ==================== VULNERABLE HOSTS ==================== #}
+    {% if vulnerable %}
+    <div class="page-break">
+        <h2 class="section-title">Vulnerable Hosts</h2>
+        {% for r in vulnerable %}
+        <div class="finding-box">
+            <div class="finding-header">
+                <span class="h-title">{{ r.ip }}</span>
+                <span class="mono">{{ r.detected_version or "version unknown" }}</span>
+            </div>
+            <div class="finding-body">
+                <table class="kv">
+                    <tr><td class="label">Open ports</td>
+                        <td class="mono">{{ (r.open_ports or [])|join(', ') }}</td></tr>
+                    <tr><td class="label">Server header</td>
+                        <td class="mono">{{ r.server_header }}</td></tr>
+                    <tr><td class="label">Backend</td>
+                        <td class="mono">{{ r.backend or 'unknown' }}</td></tr>
+                    <tr><td class="label">Detail</td><td>{{ r.notes }}</td></tr>
+                </table>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {# ==================== ALL ALIVE HOSTS ==================== #}
+    <div class="page-break">
+        <h2 class="section-title">All Alive Hosts</h2>
+        {% if results %}
+        <table class="results">
+            <thead>
+                <tr>
+                    <th>IP</th>
+                    <th>Status</th>
+                    <th>Open Ports</th>
+                    <th>Server Header</th>
+                    <th>Version</th>
+                    <th>Backend</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in results %}
+                <tr>
+                    <td class="mono">{{ r.ip }}</td>
+                    <td class="status-{{ r.status }}">{{ r.status }}</td>
+                    <td class="mono">{{ (r.open_ports or [])|join(', ') }}</td>
+                    <td class="mono">{{ r.server_header }}</td>
+                    <td class="mono">{{ r.detected_version }}</td>
+                    <td class="mono">{{ r.backend or 'unknown' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="text-muted">No alive hosts in the scanned range.</p>
+        {% endif %}
+    </div>
+
+    {# ==================== VERIFICATION ==================== #}
+    <div class="page-break">
+        <h2 class="section-title">Verification Guidance</h2>
+        <p>The Server-header version reported above can be misleading. Distros backport
+            security fixes without bumping the version, and nginx bundled inside Java
+            appliances, vendor products, or Docker images won't appear in <code>rpm</code>/<code>apt</code>
+            at all. Use the appropriate verification path for each finding based on its
+            <strong>Backend</strong> column.</p>
+
+        <h3>Universal: interrogate the running binary</h3>
+        <p>Works regardless of how nginx was deployed (OS package, container, vendor bundle, source build):</p>
+        <table class="kv">
+            <tr><td class="label">1. Find the master pid</td>
+                <td><code>ps -ef | grep '[n]ginx: master'</code></td></tr>
+            <tr><td class="label">2. Resolve the binary path</td>
+                <td><code>readlink /proc/&lt;pid&gt;/exe</code></td></tr>
+            <tr><td class="label">3. Print exact version + build flags</td>
+                <td><code>&lt;path&gt; -V 2&gt;&amp;1</code></td></tr>
+        </table>
+
+        <h3>Backend-specific routing</h3>
+        <table class="kv">
+            <tr><td class="label">java/atlassian, java/jira, java/confluence, java/bitbucket</td>
+                <td>nginx is bundled by Atlassian. Check the vendor's security advisory and apply the vendor patch — do not try to swap the binary.</td></tr>
+            <tr><td class="label">java (generic), java/tomcat, java/jetty</td>
+                <td>nginx may be a separate reverse proxy or part of an appliance. Verify with the running-binary method above; if it's bundled, check the appliance vendor's advisory.</td></tr>
+            <tr><td class="label">php, php/wordpress, php/drupal, php/laravel</td>
+                <td>nginx is most likely an OS package fronting PHP-FPM. Check distro patch status: <code>rpm -q --changelog nginx</code> (Rocky/RHEL) or <code>apt-cache policy nginx</code> (Debian).</td></tr>
+            <tr><td class="label">node, python, ruby</td>
+                <td>nginx is most likely an OS package fronting an application server. Check distro patch status as above.</td></tr>
+            <tr><td class="label">unknown</td>
+                <td>Backend could not be fingerprinted from the response. Use the universal running-binary method.</td></tr>
+        </table>
+
+        <h3>Exploitability check (config-level)</h3>
+        <p>{{ cve.cve_id }} additionally requires a specific configuration trigger to be
+            exploitable. After confirming the version is vulnerable, check the running config:</p>
+        <table class="kv">
+            <tr><td class="label">Search for the trigger pattern</td>
+                <td><code>grep -rE 'rewrite\s+.*\$[0-9]+.*\?' /etc/nginx/</code></td></tr>
+        </table>
+        <p>The exploit fires when a <code>rewrite</code> directive is followed by another
+            <code>rewrite</code>/<code>if</code>/<code>set</code> directive that contains an
+            unnamed PCRE capture (<code>$1</code>, <code>$2</code>, …) and a <code>?</code> in
+            the replacement string. If no config matches that pattern, the host is
+            "potentially vulnerable" but not currently exploitable.</p>
+    </div>
+
+</body>
+</html>

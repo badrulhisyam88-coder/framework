@@ -1,0 +1,75 @@
+{# Input: s = {asset, host_ids, open_findings} #}
+<div class="asset-row-wrap" id="asset-wrap-{{ s.asset.id }}">
+    <div class="asset-row">
+        <span class="expand-icon" id="asset-icon-{{ s.asset.id }}"
+              onclick="toggleAssetDetails('{{ s.asset.id }}')">▶</span>
+        <strong style="font-family:var(--mono);">{{ s.asset.name }}</strong>
+        <span class="mono text-muted" style="font-size:12px;">{{ s.asset.target }}</span>
+        <span class="mono text-muted" style="font-size:11px;text-transform:uppercase;">{{ s.asset.scan_type }}</span>
+        <span class="mono text-muted" style="font-size:11px; margin-left:auto;">
+            {% if s.asset.last_scanned_at %}
+                last scan: {{ s.asset.last_scanned_at.strftime('%Y-%m-%d %H:%M') }}
+            {% else %}
+                never scanned
+            {% endif %}
+        </span>
+        <span class="count-pill mono {% if s.open_findings %}high{% endif %}"
+              style="font-size:11px;">
+            {{ s.open_findings }} open
+        </span>
+        {% if s.recon_count %}
+        <span class="count-pill mono" style="font-size:11px;">
+            {{ s.recon_count }} discovered
+        </span>
+        {% endif %}
+        <button class="btn btn-secondary btn-sm asset-recon-btn"
+                hx-post="/api/v1/validation/assets/{{ s.asset.id }}/recon"
+                hx-target="#asset-wrap-{{ s.asset.id }}"
+                hx-swap="outerHTML"
+                hx-disabled-elt="this"
+                hx-on::before-request="this.closest('.asset-row-wrap').classList.add('asset-status-scanning')"
+                hx-on::after-request="if(!event.detail.successful){this.closest('.asset-row-wrap').classList.remove('asset-status-scanning')}">
+            <span class="scan-label-idle">🔍 Recon</span>
+            <span class="scan-label-busy"><span class="spinner"></span> Recon…</span>
+        </button>
+        <button class="btn btn-primary btn-sm asset-scan-btn"
+                hx-post="/api/v1/validation/assets/{{ s.asset.id }}/scan"
+                hx-target="#asset-wrap-{{ s.asset.id }}"
+                hx-swap="outerHTML"
+                hx-disabled-elt="this"
+                hx-on::before-request="this.closest('.asset-row-wrap').classList.add('asset-status-scanning')"
+                hx-on::after-request="if(!event.detail.successful){this.closest('.asset-row-wrap').classList.remove('asset-status-scanning')}">
+            <span class="scan-label-idle">Scan</span>
+            <span class="scan-label-busy"><span class="spinner"></span> Scanning…</span>
+        </button>
+        <button class="btn btn-secondary btn-sm" type="button"
+                onclick="toggleAssetDetails('{{ s.asset.id }}')">▶ Details</button>
+        <button type="button" class="btn btn-secondary btn-sm"
+                onclick='openExportPanel("asset", "{{ s.asset.id }}", {{ s.asset.name|tojson }})'>
+            ↓ Export
+        </button>
+        <button class="btn btn-reject btn-sm"
+                hx-delete="/api/v1/validation/assets/{{ s.asset.id }}"
+                hx-target="#asset-wrap-{{ s.asset.id }}"
+                hx-swap="outerHTML"
+                hx-confirm="Delete asset {{ s.asset.name }}?">
+            ✕
+        </button>
+    </div>
+    <div class="asset-scan-indicator">
+        <div class="asset-scan-caption">
+            <span class="spinner"></span>
+            Working on <strong>{{ s.asset.name }}</strong> ({{ s.asset.target }})…
+            scans take 15–60 seconds, recon usually under 10 seconds.
+        </div>
+        <div class="progress-bar-wrap">
+            <div class="indeterminate-bar"></div>
+        </div>
+    </div>
+    <div class="asset-details"
+         id="asset-details-{{ s.asset.id }}"
+         data-asset-id="{{ s.asset.id }}"
+         style="display:none;">
+        <span class="text-muted mono" style="font-size:11px;">Click ▶ to load details…</span>
+    </div>
+</div>

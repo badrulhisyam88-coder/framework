@@ -1,0 +1,196 @@
+{#
+  Partial: learning_path_panel.html
+  Context: investigation, recommendations (list[PathRecommendation]), progress_by_path (dict path_id→progress)
+  Usage:
+    hx-get="/api/v1/validation/investigation-core/investigations/{id}/learning/partial"
+    hx-trigger="load"
+#}
+
+<div class="learning-panel">
+  {% if not recommendations %}
+    <div class="empty-state" style="padding:1.5rem 0;">
+      <span class="empty-state-icon">◧</span>
+      <p>No learning recommendations yet. Recommendations appear automatically once findings are detected for this investigation.</p>
+    </div>
+  {% else %}
+    <div class="learning-list">
+      {% for rec in recommendations %}
+        {% set progress = progress_by_path.get(rec.path.path_id) %}
+        {% set is_completed = rec.already_completed %}
+        {% set is_active    = rec.already_started and not is_completed %}
+
+        <div class="learning-card
+          {% if is_completed %}learning-card--done
+          {% elif is_active %}learning-card--active
+          {% endif %}
+        ">
+          <div class="learning-card-header">
+            <div>
+              <span class="learning-badge learning-badge--{{ rec.path.difficulty }}">
+                {{ rec.path.difficulty }}
+              </span>
+              <span class="learning-title">{{ rec.path.title }}</span>
+            </div>
+            <div class="learning-status-badge">
+              {% if is_completed %}
+                <span class="badge" style="background:var(--low);">✓ completed</span>
+              {% elif is_active %}
+                <span class="badge" style="background:var(--accent);">in progress</span>
+              {% endif %}
+            </div>
+          </div>
+
+          {% if rec.matched_finding_types %}
+            <div class="learning-match-row">
+              Matched:
+              {% for ft in rec.matched_finding_types %}
+                <code class="tag-chip">{{ ft }}</code>
+              {% endfor %}
+            </div>
+          {% endif %}
+
+          <div class="learning-objectives">
+            <strong>Objectives</strong>
+            <ul>
+              {% for obj in rec.path.learning_objectives[:3] %}
+                <li>{{ obj }}</li>
+              {% endfor %}
+              {% if rec.path.learning_objectives | length > 3 %}
+                <li style="color:var(--text-muted);">+{{ rec.path.learning_objectives | length - 3 }} more</li>
+              {% endif %}
+            </ul>
+          </div>
+
+          {% if progress %}
+            {# Progress bar #}
+            {% set pct = ((progress.completed_steps | length) / rec.path.step_count * 100) | round | int %}
+            <div class="learning-progress">
+              <div class="progress-bar">
+                <div class="progress-fill" style="width:{{ pct }}%;"></div>
+              </div>
+              <span class="progress-label">
+                {{ progress.completed_steps | length }} / {{ rec.path.step_count }} steps
+              </span>
+            </div>
+          {% else %}
+            <div class="learning-step-count">
+              {{ rec.path.step_count }} guided steps
+            </div>
+          {% endif %}
+
+          <div class="learning-actions">
+            {% if not is_active and not is_completed %}
+              <button
+                class="btn btn-primary btn-sm"
+                hx-post="/api/v1/validation/investigation-core/investigations/{{ investigation.investigation_id }}/learning/start"
+                hx-vals='{"path_id":"{{ rec.path.path_id }}"}'
+                hx-target="closest .learning-card"
+                hx-swap="outerHTML"
+              >Start Path</button>
+            {% elif is_active %}
+              <a href="#learning-{{ rec.path.path_id }}" class="btn btn-secondary btn-sm">
+                Continue →
+              </a>
+            {% else %}
+              <span style="font-size:.75rem;color:var(--text-muted);">Path complete</span>
+            {% endif %}
+          </div>
+
+          {# Guided steps accordion — shown only when active #}
+          {% if is_active and progress %}
+            <div class="guided-steps" id="learning-{{ rec.path.path_id }}">
+              {% for step in rec.path.guided_steps %}
+                {% set done = step.step_id in progress.completed_steps %}
+                <details class="guided-step {% if done %}guided-step--done{% endif %}"
+                         {% if not done and loop.index0 == progress.current_step_index %}open{% endif %}>
+                  <summary class="guided-step-summary">
+                    <span class="step-indicator">{% if done %}✓{% else %}{{ loop.index }}{% endif %}</span>
+                    {{ step.title }}
+                  </summary>
+                  <div class="guided-step-body">
+                    <p class="step-explanation">{{ step.explanation }}</p>
+                    <div class="step-why">
+                      <strong>Why this matters</strong>
+                      <p>{{ step.why_this_matters }}</p>
+                    </div>
+                    <div class="step-evidence">
+                      <strong>Expected evidence</strong>
+                      <p>{{ step.expected_evidence }}</p>
+                    </div>
+                    {% if step.learner_input %}
+                      <div class="step-input">
+                        <strong>Try this</strong>
+                        <code class="step-input-code">{{ step.learner_input }}</code>
+                      </div>
+                    {% endif %}
+                    <div class="step-validation">
+                      <strong>Done when</strong>
+                      <p>{{ step.completion_validation }}</p>
+                    </div>
+                    {% if not done %}
+                      <button
+                        class="btn btn-primary btn-sm"
+                        style="margin-top:.5rem;"
+                        hx-post="/api/v1/validation/investigation-core/investigations/{{ investigation.investigation_id }}/learning/{{ rec.path.path_id }}/steps/{{ step.step_id }}/complete"
+                        hx-target="closest .learning-panel"
+                        hx-swap="outerHTML"
+                      >Mark Complete</button>
+                    {% endif %}
+                  </div>
+                </details>
+              {% endfor %}
+            </div>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+</div>
+
+<style>
+.learning-panel      { padding: .25rem 0; }
+.learning-list       { display: flex; flex-direction: column; gap: .75rem; }
+.learning-card       {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: .85rem 1rem;
+}
+.learning-card--done   { border-color: var(--low); opacity: .8; }
+.learning-card--active { border-color: var(--accent); }
+.learning-card-header  { display: flex; justify-content: space-between; align-items: flex-start; gap: .5rem; margin-bottom: .45rem; }
+.learning-title        { font-size: .85rem; font-weight: 600; color: var(--text-primary); }
+.learning-badge        { font-size: .65rem; font-family: var(--mono); border-radius: 3px; padding: 1px 5px; margin-right: .35rem; text-transform: uppercase; }
+.learning-badge--beginner     { background: color-mix(in srgb, var(--low) 20%, transparent); color: var(--low); border: 1px solid var(--low); }
+.learning-badge--intermediate { background: color-mix(in srgb, var(--medium) 20%, transparent); color: var(--medium); border: 1px solid var(--medium); }
+.learning-badge--advanced     { background: color-mix(in srgb, var(--high) 20%, transparent); color: var(--high); border: 1px solid var(--high); }
+.learning-match-row    { font-size: .72rem; color: var(--text-muted); margin-bottom: .4rem; }
+.tag-chip              { font-size: .68rem; font-family: var(--mono); background: var(--bg-raised); border: 1px solid var(--border); border-radius: 3px; padding: 0 .3rem; margin-left: .2rem; }
+.learning-objectives   { font-size: .78rem; margin: .35rem 0; }
+.learning-objectives ul { margin: .2rem 0 0 1.1rem; padding: 0; }
+.learning-objectives li { margin-bottom: .15rem; color: var(--text-secondary); }
+.learning-step-count   { font-size: .72rem; color: var(--text-muted); font-family: var(--mono); margin: .3rem 0; }
+.learning-actions      { margin-top: .6rem; }
+.progress-bar          { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; display: inline-block; width: 8rem; vertical-align: middle; }
+.progress-fill         { height: 100%; background: var(--accent); transition: width .3s; }
+.progress-label        { font-size: .7rem; color: var(--text-muted); font-family: var(--mono); margin-left: .4rem; vertical-align: middle; }
+.learning-progress     { margin: .35rem 0; }
+
+/* Guided steps */
+.guided-steps          { margin-top: .75rem; border-top: 1px solid var(--border); padding-top: .5rem; display: flex; flex-direction: column; gap: .3rem; }
+.guided-step           { border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+.guided-step--done     { opacity: .65; }
+.guided-step-summary   { padding: .45rem .65rem; cursor: pointer; font-size: .8rem; font-weight: 500; display: flex; align-items: center; gap: .5rem; list-style: none; }
+.guided-step-summary::-webkit-details-marker { display: none; }
+.step-indicator        { font-size: .7rem; font-family: var(--mono); min-width: 1.1rem; text-align: center; color: var(--text-muted); }
+.guided-step--done .step-indicator { color: var(--low); }
+.guided-step-body      { padding: .65rem .85rem; border-top: 1px solid var(--border); font-size: .78rem; display: flex; flex-direction: column; gap: .55rem; }
+.step-explanation      { color: var(--text-secondary); margin: 0; }
+.step-why, .step-evidence, .step-input, .step-validation { background: color-mix(in srgb, var(--accent) 5%, var(--bg-raised)); border-left: 3px solid var(--border); padding: .4rem .6rem; border-radius: 0 4px 4px 0; }
+.step-why { border-left-color: var(--medium); }
+.step-evidence { border-left-color: var(--accent); }
+.step-input { border-left-color: var(--low); }
+.step-input strong, .step-why strong, .step-evidence strong, .step-validation strong { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); display: block; margin-bottom: .2rem; }
+.step-input-code { display: block; font-family: var(--mono); font-size: .72rem; color: var(--text-primary); white-space: pre-wrap; word-break: break-all; margin-top: .2rem; }
+.btn-sm { padding: .25rem .6rem; font-size: .75rem; }
+</style>

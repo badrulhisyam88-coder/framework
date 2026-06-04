@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block title %}Investigations — AI Assist{% endblock %}
+
+{% block content %}
+{# V1.4a — Landing page matching the operator-approved mockup. #}
+<div class="p-8">
+
+  <!-- Header -->
+  <div class="flex justify-between items-center mb-6">
+    <h1 class="mono text-2xl font-semibold">Investigations</h1>
+    <button onclick="openStartModal()"
+            class="bg-[#0969da] text-white px-4 py-2 rounded text-sm font-medium hover:bg-[#0860ca]">
+      + Start investigation
+    </button>
+  </div>
+
+  <!-- Stat cards -->
+  <div class="grid grid-cols-4 gap-4 mb-6">
+    <div class="bg-white border-l-4 border-[#1a7f37] border-t border-r border-b border-[#d0d7de] rounded p-4">
+      <div class="text-3xl font-semibold mb-1">{{ confirmed_count }}</div>
+      <div class="mono text-[10px] tracking-widest text-[#656d76] mb-1">CONFIRMED VULNERABILITIES</div>
+      <div class="text-xs text-[#656d76]">
+        {% if confirmed_count %}{{ confirmed_count }} target{{ 's' if confirmed_count != 1 else '' }} with confirmed exploits{% else %}No confirmed exploitable findings{% endif %}
+      </div>
+    </div>
+    <div class="bg-white border border-[#d0d7de] rounded p-4">
+      <div class="text-3xl font-semibold mb-1">{{ pending_total }}</div>
+      <div class="mono text-[10px] tracking-widest text-[#656d76] mb-1">STEPS AWAITING EVIDENCE</div>
+      <div class="text-xs text-[#656d76]">{% if pending_total %}{{ pending_total }} validation{{ 's' if pending_total != 1 else '' }} pending{% else %}All steps progressed{% endif %}</div>
+    </div>
+    <div class="bg-white border border-[#d0d7de] rounded p-4">
+      <div class="text-3xl font-semibold mb-1">{{ critical_findings }}</div>
+      <div class="mono text-[10px] tracking-widest text-[#656d76] mb-1">CRITICAL FINDINGS</div>
+      <div class="text-xs text-[#656d76]">Across all targets</div>
+    </div>
+    <div class="bg-white border border-[#d0d7de] rounded p-4">
+      <div class="text-3xl font-semibold mb-1">{{ total_investigations }}</div>
+      <div class="mono text-[10px] tracking-widest text-[#656d76] mb-1">ACTIVE INVESTIGATIONS</div>
+      <div class="text-xs text-[#656d76]">
+        {% if total_investigations %}{{ total_investigations }} target{{ 's' if total_investigations != 1 else '' }} being tracked{% else %}No investigations started{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Investigation cards -->
+  {% if investigations %}
+  <div class="grid grid-cols-2 gap-4">
+    {% for inv in investigations %}
+    <div onclick="window.location.href='{{ inv.workspace_url }}'"
+         class="bg-white border border-[#d0d7de] rounded p-4 cursor-pointer hover:border-[#0969da] transition-colors">
+
+      <div class="flex justify-between items-start mb-3">
+        <div class="mono text-sm truncate flex-1 mr-3">Investigation: {{ inv.target | truncate(40, true, '…') }}</div>
+        <span class="mono text-[10px] tracking-widest flex-shrink-0
+          {% if inv.stage == 'confirmed' %}bg-[#ffebe9] text-[#cf222e] border border-[#ff8182]
+          {% elif inv.stage in ('detection', 'validation') %}bg-[#fff8c5] text-[#9a6700] border border-[#d4a72c]
+          {% elif inv.stage == 'clear' %}bg-[#dafbe1] text-[#1a7f37] border border-[#4ac26b]
+          {% else %}bg-[#f3f4f6] text-[#656d76] border border-[#d0d7de]
+          {% endif %} px-2 py-0.5 rounded">
+          {% if inv.stage == 'no_scan' %}◌ NO SCAN
+          {% elif inv.stage == 'discovered' %}◉ DISCOVERED
+          {% elif inv.stage == 'detection' %}◆ DETECTION
+          {% elif inv.stage == 'validation' %}◈ VALIDATION
+          {% elif inv.stage == 'confirmed' %}⚠ CONFIRMED
+          {% elif inv.stage == 'clear' %}✓ CLEAR
+          {% else %}{{ inv.stage_label | upper }}{% endif %}
+        </span>
+      </div>
+
+      <div class="mono text-xs text-[#656d76] mb-3">
+        {{ inv.target | truncate(60, true, '…') }}{% if inv.last_activity %} · {{ inv.last_activity }}{% endif %}
+      </div>
+
+      <!-- Timeline progress pills -->
+      <div class="flex items-center gap-1 text-xs mb-3 flex-wrap">
+        {% for step in inv.timeline %}
+        {% if not loop.first %}
+        <span class="text-[#d0d7de]">―――</span>
+        {% endif %}
+        <span class="w-5 h-5 rounded-full flex items-center justify-center text-[9px] flex-shrink-0
+          {% if step.done %}bg-[#1a7f37] text-white
+          {% elif step.active %}bg-[#0969da] text-white
+          {% else %}border border-[#d0d7de] text-[#d0d7de]{% endif %}">
+          {% if step.done %}✓{% elif step.active %}●{% else %}○{% endif %}
+        </span>
+        <span class="{% if step.active %}text-[#0969da]{% else %}text-[#656d76]{% endif %}">{{ step.label }}</span>
+        {% endfor %}
+      </div>
+
+      <div class="flex justify-between items-center pt-2 border-t border-[#f3f4f6]">
+        <span class="mono text-xs
+          {% if inv.findings_critical > 0 %}text-[#cf222e]
+          {% elif inv.total_findings > 0 %}text-[#9a6700]
+          {% else %}text-[#1a7f37]{% endif %}">
+          {% if inv.findings_critical > 0 %}⚠ {{ inv.findings_critical }} critical
+          {% elif inv.total_findings > 0 %}{{ inv.total_findings }} finding{{ 's' if inv.total_findings != 1 else '' }}
+          {% else %}✓ No findings{% endif %}
+        </span>
+        <div class="flex items-center gap-2" onclick="event.stopPropagation()">
+          {% if inv.investigation_id %}
+          <button
+            onclick="deleteInvestigation('{{ inv.investigation_id }}', event)"
+            class="text-[#656d76] hover:text-[#cf222e] px-2 py-1 rounded text-xs border border-transparent hover:border-[#cf222e] transition-colors mono">
+            Delete
+          </button>
+          {% endif %}
+          <a href="{{ inv.workspace_url }}"
+             class="bg-[#0969da] text-white px-3 py-1 rounded text-xs hover:bg-[#0860ca]">
+            Open workspace →
+          </a>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% else %}
+  <!-- Empty state -->
+  <div class="bg-white border border-[#d0d7de] rounded p-12 text-center">
+    <div class="mono text-[10px] tracking-widest text-[#656d76] mb-3">NO INVESTIGATIONS YET</div>
+    <p class="text-sm text-[#656d76] mb-6">Start an investigation by entering a target URL, IP, or hostname.</p>
+    <button onclick="openStartModal()"
+            class="bg-[#0969da] text-white px-4 py-2 rounded text-sm font-medium hover:bg-[#0860ca]">
+      + Start first investigation
+    </button>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function deleteInvestigation(invId, evt) {
+    evt.stopPropagation();
+    if (!confirm('Delete this investigation? This cannot be undone.')) return;
+    fetch('/api/v1/validation/investigations/' + invId + '/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+    }).then(function(r) {
+        if (r.ok) {
+            window.location.reload();
+        } else {
+            alert('Delete failed (HTTP ' + r.status + ')');
+        }
+    }).catch(function(e) {
+        alert('Delete failed: ' + e.message);
+    });
+}
+</script>
+{% endblock %}

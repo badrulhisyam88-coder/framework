@@ -1,0 +1,36 @@
+{% set r = result %}
+<div style="background:#f6f8fa;border:1px solid #d0d7de;border-radius:4px;padding:12px 16px;">
+  <strong>Dedup completed</strong> — {{ now_iso }}<br>
+  <table style="width:auto;margin:0.5rem 0;border-collapse:collapse;">
+    <tr>
+      <td style="padding:3px 14px 3px 0;color:#888;">Near-duplicate pairs found</td>
+      <td><strong>{{ r.pairs_found }}</strong></td>
+    </tr>
+    <tr>
+      <td style="padding:3px 14px 3px 0;color:#888;">Documents removed</td>
+      <td>
+        <strong {% if r.removed > 0 %}style="color:#dc2626;"{% endif %}>
+          {{ r.removed }}
+        </strong>
+      </td>
+    </tr>
+  </table>
+
+  {% if r.removed_ids %}
+  <p style="margin:0.5rem 0 0.25rem;font-size:0.85em;color:#888;">Removed IDs:</p>
+  <ul style="margin:0;padding-left:1.5rem;font-family:monospace;font-size:0.85em;">
+    {% for rid in r.removed_ids %}
+    <li>{{ rid }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  {% if r.log %}
+  <details style="margin-top:0.75rem;">
+    <summary style="cursor:pointer;color:#888;font-size:0.85em;">Deletion log ({{ r.log|length }} entries)</summary>
+    <pre style="margin:0.5rem 0 0;font-size:0.78em;background:#fff;border:1px solid #e8eaed;
+                border-radius:3px;padding:8px;overflow-x:auto;white-space:pre-wrap;">{% for line in r.log %}{{ line }}
+{% endfor %}</pre>
+  </details>
+  {% endif %}
+</div>

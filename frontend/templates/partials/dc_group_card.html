@@ -1,0 +1,114 @@
+{# Inputs: g = {group, assets[asset_summary], asset_count, open_findings, last_scanned}, default_workers #}
+<div class="dc-group-card" id="dc-group-{{ g.group.id }}">
+    <div class="dc-group-header" onclick="toggleDcGroup('{{ g.group.id }}')">
+        <span class="expand-icon" id="dc-icon-{{ g.group.id }}">▶</span>
+        <strong style="font-family:var(--mono);">{{ g.group.name }}</strong>
+        {% if g.group.location %}
+        <span class="text-muted mono" style="font-size:11px;">[{{ g.group.location }}]</span>
+        {% endif %}
+        <span class="host-group-counts" style="margin-left:8px;">
+            <span class="count-pill mono">{{ g.asset_count }} asset{{ "s" if g.asset_count != 1 else "" }}</span>
+            <span class="count-pill mono {% if g.open_findings %}high{% endif %}">
+                {{ g.open_findings }} open
+            </span>
+            <span class="count-pill mono">
+                {% if g.last_scanned %}
+                    {{ g.last_scanned.strftime('%Y-%m-%d %H:%M') }}
+                {% else %}
+                    never
+                {% endif %}
+            </span>
+        </span>
+        <span style="margin-left:auto;" class="flex gap-2" onclick="event.stopPropagation();">
+            <button class="btn btn-secondary btn-sm scan-all-btn"
+                    id="scan-all-btn-{{ g.group.id }}"
+                    type="button"
+                    onclick='startScanAll("{{ g.group.id }}", {{ g.asset_count }}, {{ g.group.name|tojson }})'>
+                <span class="scan-label-idle">Scan All</span>
+                <span class="scan-label-busy"><span class="spinner"></span> Scanning…</span>
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm"
+                    onclick='openExportPanel("dc-group", "{{ g.group.id }}", {{ g.group.name|tojson }})'>
+                ↓ Export Report
+            </button>
+            <button class="btn btn-reject btn-sm"
+                    hx-delete="/api/v1/validation/assets/dc-groups/{{ g.group.id }}"
+                    hx-target="#dc-group-{{ g.group.id }}"
+                    hx-swap="outerHTML"
+                    hx-confirm="Delete DC group {{ g.group.name }} and all {{ g.asset_count }} of its asset(s)?">
+                ✕ Delete DC
+            </button>
+        </span>
+    </div>
+
+    <div class="dc-group-body" id="dc-body-{{ g.group.id }}" style="display:none;">
+        {% if g.group.notes %}
+        <p class="text-muted" style="font-size:12px; margin-top:10px;">{{ g.group.notes }}</p>
+        {% endif %}
+
+        <div id="scan-progress-{{ g.group.id }}" class="scan-progress hidden">
+            <div class="progress-label">
+                Scanning <span class="current">0</span>/<span class="total">{{ g.asset_count }}</span>:
+                <span class="current-name">—</span>
+            </div>
+            <div class="progress-bar-wrap">
+                <div class="progress-bar-fill" style="width:0%"></div>
+            </div>
+        </div>
+
+        <div id="asset-list-{{ g.group.id }}" style="margin-top:10px;">
+            {% for s in g.assets %}
+                {% include "partials/asset_row.html" %}
+            {% else %}
+                <p class="text-muted" style="font-size:12px;margin:8px 0;">No assets yet.</p>
+            {% endfor %}
+        </div>
+
+        <button class="btn btn-secondary btn-sm" type="button"
+                onclick="toggleAddAssetForm('{{ g.group.id }}')"
+                style="margin-top:10px;">
+            + Add Asset to {{ g.group.name }}
+        </button>
+
+        <form id="add-asset-form-{{ g.group.id }}"
+              class="card"
+              style="display:none; margin-top:10px;"
+              hx-post="/api/v1/validation/assets"
+              hx-target="#asset-list-{{ g.group.id }}"
+              hx-swap="beforeend"
+              hx-on::after-request="if(event.detail.successful){this.reset();this.style.display='none';}">
+            <input type="hidden" name="dc_group_id" value="{{ g.group.id }}">
+            <div class="flex gap-3" style="flex-wrap:wrap;align-items:flex-end;">
+                <div class="form-group" style="flex:1;min-width:180px;margin-bottom:0;">
+                    <label class="form-label">Name</label>
+                    <input class="form-input" name="name" required placeholder="asycuda.org">
+                </div>
+                <div class="form-group" style="flex:1.5;min-width:200px;margin-bottom:0;">
+                    <label class="form-label">Target</label>
+                    <input class="form-input" name="target" required placeholder="175.136.246.166 or 10.0.0.0/24">
+                </div>
+                <div class="form-group" style="max-width:140px;margin-bottom:0;">
+                    <label class="form-label">Scan Type</label>
+                    <select class="form-select" name="scan_type">
+                        <option value="quick" selected>Quick</option>
+                        <option value="full">Full</option>
+                    </select>
+                </div>
+                <div class="form-group" style="max-width:100px;margin-bottom:0;">
+                    <label class="form-label">Workers</label>
+                    <input class="form-input" type="number" name="workers"
+                           min="1" max="32" value="{{ default_workers or 4 }}">
+                </div>
+                <div class="form-group" style="flex:2;min-width:200px;margin-bottom:0;">
+                    <label class="form-label">Notes</label>
+                    <input class="form-input" name="notes" placeholder="optional">
+                </div>
+                <div class="flex gap-2">
+                    <button type="submit" class="btn btn-primary">Save</button>
+                    <button type="button" class="btn btn-secondary"
+                            onclick="toggleAddAssetForm('{{ g.group.id }}')">Cancel</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>

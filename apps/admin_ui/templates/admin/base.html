@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Admin — ai-assist-tool</title>
+  <link rel="stylesheet" href="/admin/static/admin.css">
+  <script src="/static/js/htmx.min.js"></script>
+</head>
+<body>
+  <nav>
+    <a href="/admin/settings">Dashboard</a>
+    <a href="/admin/conductor">Conductor</a>
+    <a href="/admin/execution">Execution</a>
+    <a href="/admin/enumeration-gaps">Enum Gaps</a>
+    <a href="/admin/vault-inspect">Vault Inspector</a>
+    <span class="env">backend admin</span>
+  </nav>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

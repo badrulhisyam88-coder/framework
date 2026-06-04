@@ -1,0 +1,48 @@
+{#
+  Partial: campaigns_list.html
+  Light list of campaigns with member counts.
+#}
+<div class="cl-panel">
+  <div class="cl-header">
+    <span class="cl-title">{{ campaigns | length }} campaign{{ 's' if campaigns | length != 1 }}</span>
+  </div>
+
+  {% if not campaigns %}
+    <div class="cl-empty">
+      No campaigns yet. Create one to group related investigations into a multi-stage storyline.
+    </div>
+  {% else %}
+  <ul class="cl-list">
+    {% for c in campaigns %}
+    <li class="cl-row">
+      <span class="cl-name">{{ c.title }}</span>
+      <span class="cl-status cl-status--{{ c.status }}">{{ status_labels[c.status] }}</span>
+      <span class="cl-count mono">{{ member_counts.get(c.campaign_id, 0) }} investigation(s)</span>
+      <span class="cl-ts mono">{{ c.created_at.strftime('%Y-%m-%d') }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</div>
+
+<style>
+.cl-panel { display: flex; flex-direction: column; gap: .3rem; padding: .6rem .8rem;
+            background: var(--bg-raised); border: 1px solid var(--border); border-radius: 5px; }
+.cl-header { padding-bottom: .3rem; border-bottom: 1px solid var(--border); }
+.cl-title { font-size: .78rem; font-weight: 600; }
+.cl-empty { font-size: .7rem; color: var(--text-muted); padding: 1rem 0;
+            text-align: center; font-style: italic; }
+.cl-list { list-style: none; margin: 0; padding: 0; }
+.cl-row { display: flex; gap: .5rem; align-items: baseline; padding: .3rem 0;
+          border-bottom: 1px dashed color-mix(in srgb, var(--border) 60%, transparent);
+          font-size: .7rem; }
+.cl-row:last-child { border-bottom: none; }
+.cl-name { flex: 1; font-weight: 600; }
+.cl-status { font-size: .56rem; padding: 1px 5px; border-radius: 3px;
+             font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.cl-status--planning  { background: color-mix(in srgb, var(--text-muted) 15%, transparent); color: var(--text-muted); }
+.cl-status--active    { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
+.cl-status--paused    { background: color-mix(in srgb, var(--medium) 18%, transparent); color: var(--medium); }
+.cl-status--completed { background: color-mix(in srgb, var(--low) 22%, transparent); color: var(--low); }
+.cl-count, .cl-ts { font-size: .6rem; color: var(--text-muted); }
+</style>

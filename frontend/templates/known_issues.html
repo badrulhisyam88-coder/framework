@@ -1,0 +1,238 @@
+{% extends "base.html" %}
+{% block title %}Known Issues — AI Assist Tool{% endblock %}
+{% block heading %}Known Issues{% endblock %}
+{% block content %}
+<style>
+    .tab-row {
+        display: flex;
+        gap: 4px;
+        margin: 0 0 16px 0;
+        border-bottom: 1px solid var(--border, #2a2a2a);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 13px;
+    }
+    .tab-row .tab {
+        padding: 8px 14px;
+        color: var(--text-muted, #9aa0a6);
+        background: transparent;
+        border: none;
+        border-bottom: 2px solid transparent;
+        margin-bottom: -1px;
+        cursor: pointer;
+        font: inherit;
+    }
+    .tab-row .tab:hover { color: var(--text, #e6e6e6); }
+    .tab-row .tab.is-active {
+        color: var(--accent, #4f8cff);
+        border-bottom-color: var(--accent, #4f8cff);
+        font-weight: 600;
+    }
+    .tab-row .tab .count {
+        color: var(--text-muted, #9aa0a6);
+        margin-left: 4px;
+    }
+    .tab-row .tab.is-active .count { color: var(--accent, #4f8cff); }
+    .tab-panel { display: none; }
+    .tab-panel.is-active { display: block; }
+</style>
+
+<nav class="tab-row" aria-label="Known issues tabs">
+    <button type="button" class="tab is-active" data-tab="rules">
+        Suppression Rules<span class="count">({{ rules|length }})</span>
+    </button>
+    <button type="button" class="tab" data-tab="watchlist">
+        CVE Watchlist<span class="count">({{ watchlist_count }})</span>
+    </button>
+</nav>
+
+<section class="tab-panel is-active" id="tab-rules">
+    <div class="card">
+        <p class="text-muted" style="font-size:13px;margin-bottom:0;">
+            Findings matching any rule below are auto-suppressed and never appear in
+            the open findings list. Deleting a rule re-opens any findings it was
+            holding suppressed (unless another rule still matches).
+        </p>
+    </div>
+
+    <div class="card">
+        <div class="card-title">Suppression Rules ({{ rules|length }})</div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Pattern</th>
+                        <th>Match On</th>
+                        <th>Reason</th>
+                        <th>Times Suppressed</th>
+                        <th>Last Hit</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in rules %}
+                    {% set rule = r.rule %}
+                    <tr id="rule-row-{{ rule.id }}">
+                        <td class="mono" style="font-size:12px;">{{ rule.finding_type }}</td>
+                        <td class="mono" style="font-size:12px;">{{ r.label }}</td>
+                        <td style="font-size:13px;color:var(--text-secondary);max-width:340px;">
+                            {{ rule.reason }}
+                        </td>
+                        <td class="mono">{{ rule.hit_count }}</td>
+                        <td class="text-muted mono" style="font-size:11px;">
+                            {{ rule.last_hit.strftime('%m-%d %H:%M') if rule.last_hit else "—" }}
+                        </td>
+                        <td class="text-muted mono" style="font-size:11px;">
+                            {{ rule.created_at.strftime('%m-%d %H:%M') }}
+                        </td>
+                        <td style="display:flex;gap:6px;">
+                            <button class="btn btn-secondary btn-sm"
+                                hx-post="/api/v1/validation/known-issues/{{ rule.id }}/test"
+                                hx-target="#test-result-{{ rule.id }}"
+                                hx-swap="innerHTML">Test</button>
+                            <button class="btn btn-reject btn-sm"
+                                hx-delete="/api/v1/validation/known-issues/{{ rule.id }}"
+                                hx-confirm="Delete this rule? Findings it suppressed will return to open status."
+                                hx-swap="none">Delete</button>
+                            <span id="test-result-{{ rule.id }}" class="text-muted" style="font-size:12px;align-self:center;"></span>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="7" class="empty-state">
+                        No suppression rules yet. Open a finding and click
+                        <span class="mono">⚠ Mark as Known Issue</span> to create one.
+                    </td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+<section class="tab-panel" id="tab-watchlist">
+    <div class="card">
+        <p class="text-muted" style="font-size:13px;margin-bottom:0;">
+            CVEs on this watchlist are auto-approved and executed the moment a
+            matching service is discovered. Adding a CVE here also sweeps every
+            asset already known to the system.
+        </p>
+    </div>
+
+    <div class="card">
+        <div class="flex gap-2" style="margin-bottom:12px;">
+            <button class="btn btn-secondary" type="button" onclick="toggleAddWatchlistForm()">
+                + Add CVE to Watchlist
+            </button>
+            <button class="btn btn-secondary"
+                hx-post="/api/v1/validation/watchlist/check-assets"
+                hx-confirm="Re-run the entire watchlist against every known asset?"
+                hx-swap="none">
+                Re-check All Assets
+            </button>
+        </div>
+
+        <form id="add-watchlist-form"
+              style="display:none;margin-bottom:12px;"
+              hx-post="/api/v1/validation/watchlist"
+              hx-target="#watchlist-tbody"
+              hx-swap="beforeend"
+              hx-on::after-request="if(event.detail.successful){this.reset();this.style.display='none';}">
+            <div class="flex gap-3" style="align-items:flex-end;">
+                <div class="form-group" style="flex:1;min-width:220px;margin-bottom:0;">
+                    <label class="form-label">CVE ID</label>
+                    <input class="form-input" name="cve_id" required
+                           placeholder="CVE-2021-44228"
+                           pattern="CVE-\d{4}-\d{4,}">
+                </div>
+                <div class="flex gap-2">
+                    <button type="submit" class="btn btn-primary">Add</button>
+                    <button type="button" class="btn btn-secondary"
+                            onclick="toggleAddWatchlistForm()">Cancel</button>
+                </div>
+            </div>
+        </form>
+
+        <div id="watchlist-summary" class="text-muted" style="font-size:12px;margin-bottom:8px;"></div>
+
+        <div class="card-title">Watchlist ({{ watchlist_count }})</div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>CVE ID</th>
+                        <th>Description</th>
+                        <th>Severity</th>
+                        <th>Times Hit</th>
+                        <th>Last Hit</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="watchlist-tbody">
+                    {% for w in watchlist %}
+                    {% set entry = w.entry %}
+                    <tr id="wl-row-{{ entry.id }}">
+                        <td>
+                            {% if w.source_url %}
+                            <a href="{{ w.source_url }}" target="_blank"
+                               class="mono" style="color:var(--accent);font-size:12px;">{{ entry.cve_id }}</a>
+                            {% else %}
+                            <span class="mono" style="font-size:12px;">{{ entry.cve_id }}</span>
+                            {% endif %}
+                        </td>
+                        <td style="font-size:13px;color:var(--text-secondary);max-width:380px;">
+                            {% if entry.description and entry.description|length > 160 %}
+                            {{ entry.description[:160] }}…
+                            {% else %}
+                            {{ entry.description or "" }}
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% set sev = (entry.severity or "info")|lower %}
+                            <span class="severity severity-{{ sev }}">{{ sev }}</span>
+                        </td>
+                        <td class="mono">{{ entry.hit_count }}</td>
+                        <td class="text-muted mono" style="font-size:11px;">
+                            {{ entry.last_hit.strftime('%m-%d %H:%M') if entry.last_hit else "—" }}
+                        </td>
+                        <td>
+                            <button class="btn btn-reject btn-sm"
+                                hx-delete="/api/v1/validation/watchlist/{{ entry.id }}"
+                                hx-confirm="Remove this CVE from the watchlist?"
+                                hx-target="#wl-row-{{ entry.id }}"
+                                hx-swap="outerHTML">✕ Remove</button>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="6" class="empty-state">
+                        No CVEs on the watchlist. Click
+                        <strong>+ Add CVE to Watchlist</strong> to add one.
+                    </td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+<script>
+(function() {
+    var tabs = document.querySelectorAll(".tab-row .tab");
+    var panels = document.querySelectorAll(".tab-panel");
+    tabs.forEach(function(t) {
+        t.addEventListener("click", function() {
+            var target = t.getAttribute("data-tab");
+            tabs.forEach(function(x) { x.classList.remove("is-active"); });
+            panels.forEach(function(p) { p.classList.remove("is-active"); });
+            t.classList.add("is-active");
+            var panel = document.getElementById("tab-" + target);
+            if (panel) panel.classList.add("is-active");
+        });
+    });
+})();
+
+function toggleAddWatchlistForm() {
+    var f = document.getElementById("add-watchlist-form");
+    f.style.display = (f.style.display === "none" || !f.style.display) ? "block" : "none";
+}
+</script>
+{% endblock %}

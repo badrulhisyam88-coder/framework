@@ -1,0 +1,8 @@
+service: ssh
+checks:
+  - name: default_credentials
+    plugin: ssh_plugin
+    wordlist: data/wordlists/credentials/ssh-defaults.yaml
+  - name: version_disclosure
+    plugin: ssh_plugin
+    description: Check if SSH version banner is exposed

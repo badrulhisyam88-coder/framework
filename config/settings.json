@@ -1,0 +1,4 @@
+{
+  "llm_model": "qwen2.5:7b",
+  "embed_model": "nomic-embed-text"
+}

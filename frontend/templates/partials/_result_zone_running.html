@@ -1,0 +1,15 @@
+{#
+  Phase C-3 — Zone 3 "running" partial.
+  Shown immediately after Execute. Polls result-zone endpoint every 3s.
+
+  Context: finding_id, investigation_id, engine_id
+#}
+<div id="result-zone-{{ finding_id }}"
+     style="min-height:48px;"
+     class="rounded-md border border-dashed border-[#d0d7de] px-2 py-1.5 text-[10px] text-zinc-400"
+     hx-get="/api/v1/validation/workspace/investigations/{{ investigation_id }}/result-zone/{{ finding_id }}"
+     hx-trigger="every 3s"
+     hx-swap="outerHTML">
+  <span style="animation: invSuggestedPulse 1.2s ease-in-out infinite; display:inline-block;">▸</span>
+  {{ engine_id }} running…
+</div>

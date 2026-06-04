@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AI Assist — Mockup</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  body { font-family: 'IBM Plex Sans', system-ui, sans-serif; }
+  .mono { font-family: 'IBM Plex Mono', monospace; }
+  .stage-card { position: relative; }
+  .stage-card:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    left: 1.25rem;
+    top: 100%;
+    width: 2px;
+    height: 0.75rem;
+    background: #d0d7de;
+  }
+</style>
+</head>
+<body class="bg-[#f6f8fa] text-[#1f2328] min-h-screen">
+
+  <div class="flex min-h-screen">
+
+    <!-- SIDEBAR -->
+    <nav class="w-64 border-r border-[#d0d7de] bg-white flex flex-col">
+
+      <div class="px-6 py-5 border-b border-[#d0d7de]">
+        <div class="flex items-center gap-2">
+          <div class="w-5 h-5 border-2 border-[#0969da] rotate-45"></div>
+          <span class="mono font-semibold text-base">AI Assist</span>
+        </div>
+        <div class="mono text-[10px] text-[#656d76] tracking-widest mt-1 ml-7">INVESTIGATION PLATFORM</div>
+      </div>
+
+      <div class="py-4 flex-1">
+        <div class="mono text-[10px] text-[#656d76] tracking-widest px-6 mb-2">OPERATIONS</div>
+
+        <button id="nav-investigations" onclick="goLanding()" class="w-full flex items-center gap-3 px-6 py-2 text-sm hover:bg-[#f3f4f6] text-[#0969da] bg-[#ddf4ff]">
+          <span class="w-2 h-2 rounded-full bg-[#0969da]"></span>
+          <span>Investigations</span>
+        </button>
+
+        <div id="category-tree" class="hidden">
+          <button data-tab="bootstrap" class="cat-tab w-full flex items-center justify-between pl-12 pr-4 py-2 text-sm text-[#656d76] hover:bg-[#f3f4f6]">
+            <span class="flex items-center gap-2"><span class="text-[#1a7f37]">✓</span><span>Bootstrap</span></span>
+            <span class="text-xs text-[#656d76]">12</span>
+          </button>
+          <button data-tab="authentication" class="cat-tab w-full flex items-center justify-between pl-12 pr-4 py-2 text-sm text-[#656d76] hover:bg-[#f3f4f6]">
+            <span class="flex items-center gap-2"><span class="text-[#1a7f37]">✓</span><span>Authentication</span></span>
+            <span class="text-xs text-[#1a7f37]">1 capture</span>
+          </button>
+          <button data-tab="cmdi" class="cat-tab w-full flex items-center justify-between pl-12 pr-4 py-2 text-sm text-[#656d76] hover:bg-[#f3f4f6]">
+            <span class="flex items-center gap-2"><span class="text-[#1a7f37]">✓</span><span>Command Injection</span></span>
+            <span class="text-xs text-[#1a7f37]">1 capture</span>
+          </button>
+          <button data-tab="secmisc" class="cat-tab w-full flex items-center justify-between pl-12 pr-4 py-2 text-sm text-[#656d76] hover:bg-[#f3f4f6]">
+            <span class="flex items-center gap-2"><span class="text-[#bf8700]">•</span><span>Security Misconfiguration</span></span>
+            <span class="text-xs text-[#656d76]">5</span>
+          </button>
+          <button data-tab="infra" class="cat-tab w-full flex items-center justify-between pl-12 pr-4 py-2 text-sm text-[#656d76] hover:bg-[#f3f4f6]">
+            <span class="flex items-center gap-2"><span class="text-[#0969da]">•</span><span>Infrastructure Exposure</span></span>
+            <span class="text-xs text-[#656d76]">1</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="py-4 border-t border-[#d0d7de]">
+        <div class="mono text-[10px] text-[#656d76] tracking-widest px-6 mb-2">SYSTEM</div>
+        <button class="w-full flex items-center gap-3 px-6 py-2 text-sm hover:bg-[#f3f4f6] text-[#656d76]">
+          <span class="w-2 h-2 rounded-full border border-[#656d76]"></span>
+          <span>Settings</span>
+        </button>
+      </div>
+
+      <div class="px-6 py-3 border-t border-[#d0d7de] flex items-center justify-between text-xs text-[#656d76]">
+        <span class="mono">v0.1.0</span>
+        <button class="flex items-center gap-1 px-2 py-1 rounded border border-[#d0d7de] hover:bg-[#f3f4f6]">
+          <span>☀</span><span class="mono">Light</span>
+        </button>
+        <span class="mono text-[#656d76]">Dev</span>
+      </div>
+
+    </nav>
+
+    <!-- MAIN AREA -->
+    <main class="flex-1 overflow-y-auto">
+
+      <!-- LANDING -->
+      <section id="landing" class="p-8">
+        <div class="flex justify-between items-center mb-6">
+          <h1 class="mono text-2xl font-semibold">Investigations</h1>
+          <button onclick="openStartModal()" class="bg-[#0969da] text-white px-4 py-2 rounded text-sm font-medium hover:bg-[#0860ca]">+ Start investigation</button>
+        </div>
+
+        <div class="grid grid-cols-4 gap-4 mb-6">
+          <div class="bg-white border-l-4 border-[#1a7f37] border-t border-r border-b border-[#d0d7de] rounded p-4">
+            <div class="text-3xl font-semibold mb-1">0</div>
+            <div class="mono text-[10px] tracking-widest text-[#656d76] mb-1">CONFIRMED VULNERABILITIES</div>
+            <div class="text-xs text-[#656d76]">No confirmed exploitable findings</div>
+          </div>
+          <div class="bg-white border border-[#d0d7de] rounded p-4">
+            <div class="text-3xl font-semibold mb-1">0</div>
+            <div class="mono text-[10px] tracking-widest text-[#656d76] mb-1">STEPS AWAITING EVIDENCE</div>
+            <div class="text-xs text-[#656d76]">All steps progressed</div>
+          </div>
+          <div class="bg-white border border-[#d0d7de] rounded p-4">
+            <div class="text-3xl font-semibold mb-1">0</div>
+            <div class="mono text-[10px] tracking-widest text-[#656d76] mb-1">CRITICAL FINDINGS</div>
+            <div class="text-xs text-[#656d76]">Across all targets</div>
+          </div>
+          <div class="bg-white border border-[#d0d7de] rounded p-4">
+            <div class="text-3xl font-semibold mb-1">2</div>
+            <div class="mono text-[10px] tracking-widest text-[#656d76] mb-1">ACTIVE INVESTIGATIONS</div>
+            <div class="text-xs text-[#656d76]">All targets have surfaces</div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div onclick="enterInvestigation()" class="bg-white border border-[#d0d7de] rounded p-4 cursor-pointer hover:border-[#0969da]">
+            <div class="flex justify-between items-start mb-3">
+              <div class="mono text-sm">Investigation: http://localho...</div>
+              <span class="mono text-[10px] tracking-widest bg-[#fff8c5] text-[#9a6700] border border-[#d4a72c] px-2 py-0.5 rounded">◆ DETECTION</span>
+            </div>
+            <div class="mono text-xs text-[#656d76] mb-3">http://host.docker.internal:10000/login.php · active 56m ago</div>
+            <div class="flex items-center gap-1 text-xs mb-3">
+              <span class="w-5 h-5 rounded-full bg-[#1a7f37] text-white flex items-center justify-center text-[10px]">✓</span><span class="text-[#656d76]">Discovery</span>
+              <span class="text-[#d0d7de]">―――</span>
+              <span class="w-5 h-5 rounded-full bg-[#0969da] text-white flex items-center justify-center text-[8px]">●</span><span class="text-[#0969da]">Detection</span>
+              <span class="text-[#d0d7de]">―――</span>
+              <span class="w-5 h-5 rounded-full border border-[#d0d7de] flex items-center justify-center text-[8px] text-[#d0d7de]">○</span><span class="text-[#656d76]">Validation</span>
+              <span class="text-[#d0d7de]">―――</span>
+              <span class="w-5 h-5 rounded-full border border-[#d0d7de] flex items-center justify-center text-[8px] text-[#d0d7de]">○</span><span class="text-[#656d76]">Findings</span>
+              <span class="text-[#d0d7de]">―――</span>
+              <span class="w-5 h-5 rounded-full border border-[#d0d7de] flex items-center justify-center text-[8px] text-[#d0d7de]">○</span><span class="text-[#656d76]">Learning</span>
+            </div>
+            <div class="flex justify-between items-center pt-2">
+              <span class="mono text-xs text-[#1a7f37]">✓ No findings</span>
+              <button class="bg-[#0969da] text-white px-3 py-1 rounded text-xs">Review Validation →</button>
+            </div>
+          </div>
+
+          <div onclick="enterInvestigation()" class="bg-white border border-[#d0d7de] rounded p-4 cursor-pointer hover:border-[#0969da]">
+            <div class="flex justify-between items-start mb-3">
+              <div class="mono text-sm">Investigation: http://host.do...</div>
+              <span class="mono text-[10px] tracking-widest bg-[#fff8c5] text-[#9a6700] border border-[#d4a72c] px-2 py-0.5 rounded">◆ DETECTION</span>
+            </div>
+            <div class="mono text-xs text-[#656d76] mb-3">http://host.docker.internal:10000/ · active 44m ago</div>
+            <div class="flex items-center gap-1 text-xs mb-3">
+              <span class="w-5 h-5 rounded-full bg-[#1a7f37] text-white flex items-center justify-center text-[10px]">✓</span><span class="text-[#656d76]">Discovery</span>
+              <span class="text-[#d0d7de]">―――</span>
+              <span class="w-5 h-5 rounded-full bg-[#0969da] text-white flex items-center justify-center text-[8px]">●</span><span class="text-[#0969da]">Detection</span>
+              <span class="text-[#d0d7de]">―――</span>
+              <span class="w-5 h-5 rounded-full border border-[#d0d7de] flex items-center justify-center text-[8px] text-[#d0d7de]">○</span><span class="text-[#656d76]">Validation</span>
+              <span class="text-[#d0d7de]">―――</span>
+              <span class="w-5 h-5 rounded-full border border-[#d0d7de] flex items-center justify-center text-[8px] text-[#d0d7de]">○</span><span class="text-[#656d76]">Findings</span>
+              <span class="text-[#d0d7de]">―――</span>
+              <span class="w-5 h-5 rounded-full border border-[#d0d7de] flex items-center justify-center text-[8px] text-[#d0d7de]">○</span><span class="text-[#656d76]">Learning</span>
+            </div>
+            <div class="flex justify-between items-center pt-2">
+              <span class="mono text-xs text-[#1a7f37]">✓ No findings</span>
+              <button class="bg-[#0969da] text-white px-3 py-1 rounded text-xs">Review Validation →</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- WORKSPACE -->
+      <section id="workspace" class="hidden">
+        <div class="flex">
+          <div class="flex-1 p-8">
+
+            <div data-pane="bootstrap" class="hidden max-w-3xl">
+              <h1 class="mono text-2xl font-semibold mb-1">Bootstrap</h1>
+              <p class="text-sm text-[#656d76] mb-6">12 stages · complete</p>
+              <div class="space-y-3">
+                <div class="stage-card flex items-center gap-3 bg-white border border-[#d0d7de] rounded-md px-4 py-3"><span class="text-[#1a7f37] text-lg">✓</span><span class="text-sm">Initializing investigation</span></div>
+                <div class="stage-card flex items-center gap-3 bg-white border border-[#d0d7de] rounded-md px-4 py-3"><span class="text-[#1a7f37] text-lg">✓</span><span class="text-sm">Fingerprinting target</span></div>
+                <div class="stage-card flex items-center gap-3 bg-white border border-[#d0d7de] rounded-md px-4 py-3"><span class="text-[#1a7f37] text-lg">✓</span><span class="text-sm">Mapping exposed surfaces</span></div>
+                <div class="stage-card flex items-center gap-3 bg-white border border-[#d0d7de] rounded-md px-4 py-3"><span class="text-[#1a7f37] text-lg">✓</span><span class="text-sm">Probing security headers</span></div>
+                <div class="stage-card flex items-center gap-3 bg-white border border-[#d0d7de] rounded-md px-4 py-3"><span class="text-[#1a7f37] text-lg">✓</span><span class="text-sm">Verifying transport security</span></div>
+                <div class="stage-card flex items-center gap-3 bg-white border border-[#d0d7de] rounded-md px-4 py-3"><span class="text-[#1a7f37] text-lg">✓</span><span class="text-sm">Compiling findings</span></div>
+                <div class="stage-card flex items-center gap-3 bg-white border border-[#d0d7de] rounded-md px-4 py-3"><span class="text-[#1a7f37] text-lg">✓</span><span class="text-sm">Probing for login endpoints</span></div>
+                <div class="stage-card flex items-center gap-3 bg-white border border-[#d0d7de] rounded-md px-4 py-3"><span class="text-[#1a7f37] text-lg">✓</span><span class="text-sm">Cataloguing login endpoints</span></div>
+                <div class="stage-card flex items-center gap-3 bg-white border border-[#d0d7de] rounded-md px-4 py-3"><span class="text-[#1a7f37] text-lg">✓</span><span class="text-sm">Probing for command-injection endpoints</span></div>
+                <div class="stage-card flex items-center gap-3 bg-white border border-[#d0d7de] rounded-md px-4 py-3"><span class="text-[#1a7f37] text-lg">✓</span><span class="text-sm">Cataloguing command-injection candidates</span></div>
+                <div class="stage-card flex items-center gap-3 bg-white border border-[#d0d7de] rounded-md px-4 py-3"><span class="text-[#1a7f37] text-lg">✓</span><span class="text-sm">Scanning for login forms</span></div>
+                <div class="stage-card flex items-center gap-3 bg-white border border-[#d0d7de] rounded-md px-4 py-3"><span class="text-[#1a7f37] text-lg">✓</span><span class="text-sm">Cataloguing login forms</span></div>
+              </div>
+            </div>
+
+            <div data-pane="authentication" class="hidden max-w-3xl">
+              <h1 class="mono text-2xl font-semibold mb-1">Authentication</h1>
+              <p class="text-sm text-[#656d76] mb-6">Identity verification weaknesses · 1 capture</p>
+              <div class="space-y-3">
+                <div class="stage-card flex items-center gap-3 bg-white border border-[#d0d7de] rounded-md px-4 py-3"><span class="text-[#1a7f37] text-lg">✓</span><div class="flex-1"><div class="text-sm font-medium">Login form detected</div><div class="text-xs text-[#656d76]">/login.php · password field, CSRF token present</div></div></div>
+                <div class="stage-card flex items-center gap-3 bg-white border border-[#d0d7de] rounded-md px-4 py-3"><span class="text-[#1a7f37] text-lg">✓</span><div class="flex-1"><div class="text-sm font-medium">Credential brute force initiated</div><div class="text-xs text-[#656d76]">SecLists default-passwords.csv · iterating</div></div></div>
+                <div class="stage-card flex items-center gap-3 bg-white border border-[#d0d7de] rounded-md px-4 py-3"><span class="text-[#1a7f37] text-lg">✓</span><div class="flex-1"><div class="text-sm font-medium">Credentials found</div><div class="text-xs text-[#656d76]">attempt 7 · 302 redirect · session cookie issued</div></div></div>
+                <button onclick="openPanel('auth-capture')" class="stage-card w-full text-left flex items-center gap-3 bg-[#dafbe1] border border-[#1a7f37] rounded-md px-4 py-3 hover:bg-[#cef5d8]">
+                  <span class="text-[#1a7f37] text-lg">📦</span>
+                  <div class="flex-1"><div class="text-sm font-medium text-[#1a7f37]">Capture: admin:password</div><div class="text-xs text-[#656d76]">5 artifacts · click to view bundle</div></div>
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" class="text-[#656d76]"><path d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <div data-pane="cmdi" class="max-w-3xl">
+              <h1 class="mono text-2xl font-semibold mb-1">Command Injection</h1>
+              <p class="text-sm text-[#656d76] mb-6">Inputs interpreted as shell commands · 1 capture</p>
+              <div class="space-y-3">
+                <div class="stage-card flex items-center gap-3 bg-white border border-[#d0d7de] rounded-md px-4 py-3"><span class="text-[#1a7f37] text-lg">✓</span><div class="flex-1"><div class="text-sm font-medium">Command injection candidate detected</div><div class="text-xs text-[#656d76]">/vulnerabilities/exec/ · ip parameter</div></div></div>
+                <div class="stage-card flex items-center gap-3 bg-white border border-[#d0d7de] rounded-md px-4 py-3"><span class="text-[#1a7f37] text-lg">✓</span><div class="flex-1"><div class="text-sm font-medium">Reflected injection confirmed</div><div class="text-xs text-[#656d76]">separator ";" works · marker reflected</div></div></div>
+                <div class="stage-card flex items-center gap-3 bg-white border border-[#d0d7de] rounded-md px-4 py-3"><span class="text-[#1a7f37] text-lg">✓</span><div class="flex-1"><div class="text-sm font-medium">Identity captured</div><div class="text-xs text-[#656d76]">whoami → www-data · id → uid=33(www-data)</div></div></div>
+                <button onclick="openPanel('cmdi-capture')" class="stage-card w-full text-left flex items-center gap-3 bg-[#dafbe1] border border-[#1a7f37] rounded-md px-4 py-3 hover:bg-[#cef5d8]">
+                  <span class="text-[#1a7f37] text-lg">📦</span>
+                  <div class="flex-1"><div class="text-sm font-medium text-[#1a7f37]">Capture: whoami=www-data</div><div class="text-xs text-[#656d76]">7 artifacts · click to view bundle</div></div>
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" class="text-[#656d76]"><path d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z"/></svg>
+                </button>
+                <div class="stage-card flex items-center gap-3 bg-white border border-[#d0d7de] rounded-md px-4 py-3 opacity-60"><span class="text-[#656d76] text-lg">○</span><div class="flex-1"><div class="text-sm">Time-based blind cmdi</div><div class="text-xs text-[#656d76]">ready · not executed</div></div></div>
+                <div class="stage-card flex items-center gap-3 bg-white border border-[#d0d7de] rounded-md px-4 py-3 opacity-60"><span class="text-[#656d76] text-lg">○</span><div class="flex-1"><div class="text-sm">Boolean-based blind cmdi</div><div class="text-xs text-[#656d76]">ready · not executed</div></div></div>
+              </div>
+            </div>
+
+            <div data-pane="secmisc" class="hidden max-w-3xl">
+              <h1 class="mono text-2xl font-semibold mb-1">Security Misconfiguration</h1>
+              <p class="text-sm text-[#656d76] mb-6">Missing or weak baseline security controls · 5 findings</p>
+              <div class="space-y-3">
+                <div class="stage-card flex items-center gap-3 bg-white border border-[#d0d7de] rounded-md px-4 py-3"><span class="text-[#bf8700] text-lg">⚠</span><div class="flex-1"><div class="text-sm font-medium">Missing Referrer-Policy header</div><div class="text-xs text-[#656d76]">no probe attempted</div></div></div>
+                <div class="stage-card flex items-center gap-3 bg-white border border-[#d0d7de] rounded-md px-4 py-3"><span class="text-[#bf8700] text-lg">⚠</span><div class="flex-1"><div class="text-sm font-medium">Missing X-Content-Type-Options header</div><div class="text-xs text-[#656d76]">no probe attempted</div></div></div>
+                <div class="stage-card flex items-center gap-3 bg-white border border-[#d0d7de] rounded-md px-4 py-3"><span class="text-[#bf8700] text-lg">⚠</span><div class="flex-1"><div class="text-sm font-medium">Missing X-Frame-Options header</div><div class="text-xs text-[#656d76]">no probe attempted</div></div></div>
+                <div class="stage-card flex items-center gap-3 bg-white border border-[#d0d7de] rounded-md px-4 py-3"><span class="text-[#bf8700] text-lg">⚠</span><div class="flex-1"><div class="text-sm font-medium">Missing Strict-Transport-Security header</div><div class="text-xs text-[#656d76]">no probe attempted</div></div></div>
+                <div class="stage-card flex items-center gap-3 bg-white border border-[#d0d7de] rounded-md px-4 py-3"><span class="text-[#bf8700] text-lg">⚠</span><div class="flex-1"><div class="text-sm font-medium">Missing Content-Security-Policy header</div><div class="text-xs text-[#656d76]">no probe attempted</div></div></div>
+              </div>
+            </div>
+
+            <div data-pane="infra" class="hidden max-w-3xl">
+              <h1 class="mono text-2xl font-semibold mb-1">Infrastructure Exposure</h1>
+              <p class="text-sm text-[#656d76] mb-6">Reachable services and surfaces · 1 finding</p>
+              <div class="space-y-3">
+                <div class="stage-card flex items-center gap-3 bg-white border border-[#d0d7de] rounded-md px-4 py-3"><span class="text-[#0969da] text-lg">ℹ</span><div class="flex-1"><div class="text-sm font-medium">HTTP 200 service response</div><div class="text-xs text-[#656d76]">port 10000 · DVWA</div></div></div>
+              </div>
+            </div>
+
+          </div>
+
+          <aside id="side-panel" class="hidden w-96 border-l border-[#d0d7de] bg-white overflow-y-auto">
+            <div class="p-4">
+              <div class="flex justify-between items-start mb-4">
+                <div>
+                  <div class="mono text-[10px] uppercase tracking-widest text-[#656d76]">Capture Bundle</div>
+                  <div id="panel-title" class="font-semibold text-sm mt-1"></div>
+                </div>
+                <button onclick="closePanel()" class="text-[#656d76] hover:text-[#1f2328] p-1">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/></svg>
+                </button>
+              </div>
+              <ul id="panel-files" class="space-y-2 text-sm"></ul>
+            </div>
+          </aside>
+
+        </div>
+      </section>
+
+    </main>
+
+  </div>
+
+  <!-- START INVESTIGATION MODAL -->
+  <div id="start-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center" style="background: rgba(13, 17, 23, 0.5);">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-xl mx-4">
+      <div class="p-6">
+        <div class="flex justify-between items-start mb-4">
+          <h2 class="mono text-base tracking-widest">START INVESTIGATION</h2>
+          <button onclick="closeStartModal()" class="text-[#656d76] hover:text-[#1f2328]">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/></svg>
+          </button>
+        </div>
+        <p class="text-sm text-[#656d76] mb-5">Investigation branches will grow as surfaces are discovered. You can approve actions, capture evidence, and verify remediation inline.</p>
+
+        <div class="mb-4">
+          <label class="mono text-[10px] tracking-widest text-[#1f2328] block mb-2">TARGET (IP, URL, OR HOSTNAME)</label>
+          <input type="text" placeholder="192.168.1.100 or http://localhost:10000" class="mono w-full border-2 border-[#0969da] rounded px-3 py-2 text-sm focus:outline-none" />
+        </div>
+
+        <div class="mb-3">
+          <label class="mono text-[10px] tracking-widest text-[#1f2328] block mb-2">ENVIRONMENT</label>
+          <div class="flex items-center gap-6 text-sm">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="env" checked class="accent-[#0969da]" /> Web App</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="env" class="accent-[#0969da]" /> API</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="env" class="accent-[#0969da]" /> Infrastructure</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="env" class="accent-[#0969da]" /> Learning Lab</label>
+          </div>
+        </div>
+        <p class="text-xs text-[#656d76] mb-6">Stored as a tag on the investigation — guides downstream branch suggestions.</p>
+
+        <div class="flex justify-end gap-2">
+          <button onclick="closeStartModal()" class="px-4 py-2 rounded border border-[#d0d7de] text-sm hover:bg-[#f3f4f6]">Cancel</button>
+          <button onclick="submitStartModal()" class="bg-[#0969da] text-white px-4 py-2 rounded text-sm font-medium hover:bg-[#0860ca]">Start investigation →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const captureBundles = {
+    'auth-capture': {
+      title: 'admin:password',
+      files: [
+        { name: 'HOW_TO_REPRODUCE.md', size: 'starts here' },
+        { name: 'exploit_request.txt', size: '421 B' },
+        { name: 'exploit_response.txt', size: '1.2 KB' },
+        { name: 'session.txt', size: '108 B' },
+        { name: 'credentials.txt', size: '14 B' },
+      ]
+    },
+    'cmdi-capture': {
+      title: 'whoami=www-data',
+      files: [
+        { name: 'HOW_TO_REPRODUCE.md', size: 'starts here' },
+        { name: 'exploit_request.txt', size: '161 B' },
+        { name: 'exploit_response.txt', size: '4.6 KB' },
+        { name: 'session.txt', size: '108 B' },
+        { name: 'whoami_output.txt', size: '8 B' },
+        { name: 'id_output.txt', size: '53 B' },
+        { name: 'detected_separator.txt', size: '1 B' },
+      ]
+    }
+  };
+
+  function openPanel(captureId) {
+    const bundle = captureBundles[captureId];
+    document.getElementById('panel-title').textContent = bundle.title;
+    document.getElementById('panel-files').innerHTML = bundle.files.map(f =>
+      `<li class="flex justify-between hover:bg-[#f3f4f6] px-2 py-1 -mx-2 rounded cursor-pointer"><span>${f.name}</span><span class="text-[#656d76] text-xs">${f.size}</span></li>`
+    ).join('');
+    document.getElementById('side-panel').classList.remove('hidden');
+  }
+
+  function closePanel() {
+    document.getElementById('side-panel').classList.add('hidden');
+  }
+
+  function enterInvestigation() {
+    document.getElementById('landing').classList.add('hidden');
+    document.getElementById('workspace').classList.remove('hidden');
+    document.getElementById('category-tree').classList.remove('hidden');
+    document.getElementById('nav-investigations').classList.remove('bg-[#ddf4ff]');
+    setActiveTab('cmdi');
+  }
+
+  function goLanding() {
+    document.getElementById('landing').classList.remove('hidden');
+    document.getElementById('workspace').classList.add('hidden');
+    document.getElementById('category-tree').classList.add('hidden');
+    document.getElementById('nav-investigations').classList.add('bg-[#ddf4ff]');
+    closePanel();
+    document.querySelectorAll('.cat-tab').forEach(t => {
+      t.classList.remove('bg-[#f3f4f6]', 'text-[#1f2328]', 'font-medium');
+    });
+  }
+
+  function setActiveTab(target) {
+    document.querySelectorAll('.cat-tab').forEach(t => {
+      t.classList.remove('bg-[#f3f4f6]', 'text-[#1f2328]', 'font-medium');
+      t.classList.add('text-[#656d76]');
+    });
+    const tab = document.querySelector(`[data-tab="${target}"]`);
+    tab.classList.remove('text-[#656d76]');
+    tab.classList.add('bg-[#f3f4f6]', 'text-[#1f2328]', 'font-medium');
+    document.querySelectorAll('[data-pane]').forEach(p => p.classList.add('hidden'));
+    document.querySelector(`[data-pane="${target}"]`).classList.remove('hidden');
+  }
+
+  function openStartModal() {
+    document.getElementById('start-modal').classList.remove('hidden');
+  }
+
+  function closeStartModal() {
+    document.getElementById('start-modal').classList.add('hidden');
+  }
+
+  function submitStartModal() {
+    closeStartModal();
+    enterInvestigation();
+  }
+
+  document.querySelectorAll('.cat-tab').forEach(tab => {
+    tab.addEventListener('click', () => setActiveTab(tab.dataset.tab));
+  });
+</script>
+
+</body>
+</html>

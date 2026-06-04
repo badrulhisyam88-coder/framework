@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% from "partials/_lucide.html" import radar, search, zap, lock, database_zap, terminal, globe %}
+{% block title %}{{ target | truncate(40, true, '…') }} — AI Assist{% endblock %}
+{% block main_class %}overflow-hidden{% endblock %}
+
+{% block content %}
+{#
+  V1 PR2 — Phase-tabbed workspace (Recon / Enumeration / Exploitation).
+
+  Recon and Enumeration panes show aggregation cards rendered from
+  workspace-data.json phases[].aggregations.
+  The Exploitation pane mounts the three-level exploitation mindmap (exploitation-mindmap.js).
+  The existing Preact category graph and right-side panel are preserved.
+#}
+
+<div id="ws-root"
+     data-investigation-id="{{ investigation_id or '' }}"
+     data-target="{{ target or '' }}"
+     data-active-phase="{{ active_phase or 'recon' }}"
+     class="flex h-screen overflow-hidden">
+
+  <div class="flex-1 flex flex-col overflow-hidden">
+
+    {# Phase tab bar #}
+    <div id="phase-tabs" class="flex border-b border-[#d0d7de] bg-white px-6 shrink-0" role="tablist">
+      <button type="button" role="tab" data-phase="recon"
+              class="phase-tab flex items-center gap-2 px-4 py-3 text-sm border-b-2
+                     {% if active_phase == 'recon' %}border-[#0969da] text-[#0969da] font-semibold{% else %}border-transparent text-[#656d76] hover:text-[#1f2328]{% endif %}">
+        {{ radar(cls='w-4 h-4') }} Recon
+      </button>
+      <button type="button" role="tab" data-phase="enumeration"
+              class="phase-tab flex items-center gap-2 px-4 py-3 text-sm border-b-2
+                     {% if active_phase == 'enumeration' %}border-[#0969da] text-[#0969da] font-semibold{% else %}border-transparent text-[#656d76] hover:text-[#1f2328]{% endif %}">
+        {{ search(cls='w-4 h-4') }} Enumeration
+      </button>
+      <button type="button" role="tab" data-phase="exploitation"
+              class="phase-tab flex items-center gap-2 px-4 py-3 text-sm border-b-2
+                     {% if active_phase == 'exploitation' %}border-[#0969da] text-[#0969da] font-semibold{% else %}border-transparent text-[#656d76] hover:text-[#1f2328]{% endif %}">
+        {{ zap(cls='w-4 h-4') }} Exploitation
+      </button>
+    </div>
+
+    {# Phase panes #}
+    <div class="flex-1 overflow-hidden relative">
+
+      {# Recon pane #}
+      <div id="phase-pane-recon"
+           class="phase-pane absolute inset-0 overflow-y-auto p-8{% if active_phase != 'recon' %} hidden{% endif %}">
+        <div class="flex justify-end mb-2">
+          <button id="toggle-dropped-btn"
+                  onclick="wsToggleDropped()"
+                  class="text-xs text-[#656d76] hover:text-[#0969da] px-2 py-1 border border-[#d0d7de] rounded bg-white">
+            Show filtered findings
+          </button>
+        </div>
+        <div id="recon-agg-cards">
+          <div class="text-sm text-[#656d76] py-12 text-center">Loading…</div>
+        </div>
+      </div>
+
+      {# Enumeration pane #}
+      <div id="phase-pane-enumeration"
+           class="phase-pane absolute inset-0 overflow-y-auto p-8{% if active_phase != 'enumeration' %} hidden{% endif %}">
+        <div class="flex justify-end mb-2">
+          <button id="toggle-dropped-btn-enum"
+                  onclick="wsToggleDropped()"
+                  class="text-xs text-[#656d76] hover:text-[#0969da] px-2 py-1 border border-[#d0d7de] rounded bg-white">
+            Show filtered findings
+          </button>
+        </div>
+        <div id="enumeration-agg-cards">
+          <div class="text-sm text-[#656d76] py-12 text-center">Loading…</div>
+        </div>
+      </div>
+
+      {# Exploitation pane #}
+      <div id="phase-pane-exploitation"
+           class="phase-pane absolute inset-0 overflow-hidden flex flex-col{% if active_phase != 'exploitation' %} hidden{% endif %}">
+        {# Category sub-tabs — populated by workspace.js #}
+        <div id="exploit-cat-tabs"
+             class="flex gap-1 px-6 pt-4 pb-2 bg-white border-b border-[#d0d7de] shrink-0 flex-wrap">
+        </div>
+        {# React Flow tree container #}
+        <div id="exploit-tree-root" class="flex-1" style="min-height:0;"></div>
+        {# Autonomous-run progress trail — absolutely positioned at the pane bottom so it      #}
+        {# overlays (not displaces) the mindmap. Mindmap height is never changed by the trail. #}
+        {# Injected by _seedAutonomous in exploitation-mindmap.js; hidden when empty.          #}
+        <div id="autonomous-progress-slot"
+             style="display:none;position:absolute;bottom:0;left:0;right:0;
+                    max-height:200px;overflow-y:auto;
+                    background:rgba(255,255,255,0.97);
+                    border-top:1px solid #d0d7de;z-index:10;"></div>
+      </div>
+
+    </div>
+  </div>
+
+  {# Persistent right panel — AI workspace (always present, three vertical zones) #}
+  <aside id="ws-panel"
+         class="w-80 flex-shrink-0 border-l border-[#d0d7de] bg-white flex flex-col h-screen">
+
+    {# Zone A — Process/State strip (collapsible; Phase A STATE wires in here) #}
+    <details id="ws-zone-a" class="border-b border-[#d0d7de] shrink-0">
+      <summary class="flex items-center justify-between px-4 py-2 cursor-pointer
+                      select-none hover:bg-[#f6f8fa]">
+        <span class="text-[10px] uppercase tracking-widest text-[#656d76]">Process</span>
+        <span id="ws-zone-a-status"
+              class="text-[10px] font-mono text-[#656d76]">Idle</span>
+      </summary>
+      {# Phase A STATE — updated by exploitation-data.json poll (exploitation-mindmap.js _pollBranches) #}
+      <div id="ws-zone-a-state"
+           class="px-4 py-2 space-y-1 text-[10px] font-mono text-[#656d76] bg-[#f6f8fa]">
+        <div><span class="text-[#1f2328] mr-1">position</span>—</div>
+        <div><span class="text-[#1f2328] mr-1">artifacts</span>—</div>
+        <div><span class="text-[#1f2328] mr-1">pending</span>—</div>
+        <div><span class="text-[#1f2328] mr-1">facts</span>—</div>
+      </div>
+    </details>
+
+    {# Zone B — Unknown Queue (Phase D: cross-run backlog of unmatched results) #}
+    <details id="ws-zone-b" class="border-b border-[#d0d7de] shrink-0">
+      <summary class="flex items-center justify-between px-4 py-1.5 cursor-pointer
+                      select-none hover:bg-[#f6f8fa] text-[10px] text-[#656d76]">
+        <span>Unknowns</span>
+        <span id="ws-zone-b-count" class="font-mono">0</span>
+      </summary>
+      <div id="ws-zone-b-list"
+           class="px-4 py-2 max-h-64 overflow-y-auto text-[10px] font-mono text-[#656d76] bg-[#f6f8fa]">
+        <div class="italic">Loading…</div>
+      </div>
+    </details>
+
+    {# Zone C — AI Assistant conversation (fills remaining height) #}
+    <div id="ws-zone-c" class="flex-1 flex flex-col min-h-0 overflow-hidden">
+
+      {# Branch detail card — shown on node click, hidden otherwise (replaces transient panel) #}
+      <div id="ws-branch-detail" class="hidden border-b border-[#d0d7de] shrink-0">
+        <div class="flex items-center justify-between px-3 py-1.5 bg-[#f6f8fa]">
+          <span id="ws-panel-header-text"
+                class="text-[10px] uppercase tracking-widest text-[#656d76]">Detail</span>
+          <button id="ws-branch-detail-close"
+                  class="text-[#656d76] hover:text-[#1f2328] text-xs leading-none px-1">✕</button>
+        </div>
+        <div id="ws-panel-body" class="max-h-56 overflow-y-auto px-3 py-2"></div>
+      </div>
+
+      {# Start-exploitation CTA — shown by exploitation-mindmap.js when planner has never
+         run but pending concepts are ready. Hidden until the first poll confirms conditions. #}
+      <div id="ws-start-cta" class="hidden shrink-0 border-b border-[#d0d7de] bg-[#f6f8fa]">
+        <div class="p-3">
+          <div class="mono text-[10px] tracking-widest text-[#656d76] mb-1">EXPLOITATION READY</div>
+          <div class="text-xs text-[#1f2328] font-medium mb-1">Findings are ready.</div>
+          <div class="text-xs text-[#656d76] mb-2">Click to have the planner pick the first concept.</div>
+          <button id="ws-start-cta-btn"
+                  class="w-full bg-[#0969da] text-white px-4 py-2 rounded text-sm font-medium
+                         hover:bg-[#0860ca] disabled:opacity-50 disabled:cursor-not-allowed">
+            Start exploitation
+          </button>
+        </div>
+      </div>
+
+      {# Chat history (scrollable, flex-1) #}
+      <div id="qwen-history" class="flex-1 overflow-y-auto p-3"></div>
+
+      {# Chat input pinned at bottom #}
+      <div class="shrink-0 border-t border-[#d0d7de] p-3 flex gap-2 bg-white">
+        <input id="qwen-input"
+               placeholder="Ask / instruct…"
+               class="flex-1 border border-[#d0d7de] rounded-full px-3 py-1.5 text-sm
+                      outline-none focus:border-[#0969da]"/>
+        <button id="qwen-send"
+                class="w-8 h-8 rounded-full bg-[#18181b] text-white flex items-center
+                       justify-center hover:bg-[#24292f] shrink-0 text-sm leading-none">↑</button>
+      </div>
+    </div>
+
+  </aside>
+
+</div>
+
+{# Pass server-rendered workspace data to workspace.js to avoid first-fetch delay #}
+{% if workspace_data %}
+<script id="ws-initial-data" type="application/json">{{ workspace_data | tojson }}</script>
+{% endif %}
+{# Pre-seed exploitation branch state so exploitation-mindmap.js avoids first-paint race #}
+<script id="ws-exploitation-initial-data" type="application/json">{{ (initial_branches or {}) | tojson }}</script>
+
+{% endblock %}
+
+{% block extra_js %}
+{# Existing Preact + Dagre deps (dagre vendored — place dagre.min.js at /static/vendor/dagre.min.js) #}
+<script src="https://cdn.jsdelivr.net/npm/preact@10/dist/preact.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/preact@10/hooks/dist/hooks.umd.js"></script>
+<script src="/static/vendor/dagre.min.js"></script>
+<script src="/static/js/workspace.js?v={{ js_ver }}"></script>
+{# React Flow (vendored) — Exploitation mind tree #}
+<link rel="stylesheet" href="/static/vendor/reactflow.min.css">
+<script src="/static/vendor/react.production.min.js"></script>
+<script src="/static/vendor/react-dom.production.min.js"></script>
+<script src="/static/vendor/reactflow.min.js"></script>
+<script src="/static/js/exploitation-mindmap.js?v={{ js_ver }}"></script>
+{% endblock %}

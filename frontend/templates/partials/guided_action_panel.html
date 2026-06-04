@@ -1,0 +1,222 @@
+{#
+  Partial: guided_action_panel.html
+  Context: investigation, recommended (list of {action, approval, exec_ctx}), evidence_count
+  Usage: hx-get="/api/v1/validation/investigation-core/investigations/{id}/actions/partial"
+#}
+<div class="ga-panel">
+  {% if not recommended %}
+    <div class="empty-state" style="padding:1.5rem 0;">
+      <span class="empty-state-icon">◆</span>
+      <p>No guided actions available yet. Actions appear once findings are detected for this investigation.</p>
+    </div>
+  {% else %}
+    <p class="ga-intro">
+      Guided actions walk you through investigation steps with explicit approval gates.
+      Approve an action to reveal its step-by-step guidance.
+    </p>
+    <div class="ga-list">
+      {% for item in recommended %}
+        {% set action = item.action %}
+        {% set approval = item.approval %}
+        {% set exec_ctx = item.exec_ctx %}
+        {% set status = approval.status if approval else 'none' %}
+
+        <div class="ga-card ga-card--{{ action.risk_level }}
+          {%- if status == 'completed' %} ga-card--done
+          {%- elif status == 'approved' %} ga-card--approved
+          {%- elif status == 'rejected' %} ga-card--rejected
+          {%- endif %}"
+          id="ga-{{ action.action_id }}"
+        >
+          <div class="ga-card-header">
+            <div class="ga-title-row">
+              <span class="ga-risk-badge ga-risk--{{ action.risk_level }}">
+                {{ action.risk_level }}
+              </span>
+              <span class="ga-mode-badge">
+                {{ action.execution_mode | replace('_', ' ') }}
+              </span>
+              <span class="ga-title">{{ action.title }}</span>
+            </div>
+            <div class="ga-status-col">
+              {% if status == 'completed' %}
+                <span class="badge" style="background:var(--low);">✓ done</span>
+              {% elif status == 'approved' %}
+                <span class="badge" style="background:var(--accent);">approved</span>
+              {% elif status == 'pending' %}
+                <span class="badge" style="background:var(--warning);color:#000;">pending</span>
+              {% elif status == 'rejected' %}
+                <span class="badge" style="background:var(--text-muted);">rejected</span>
+              {% endif %}
+            </div>
+          </div>
+
+          <p class="ga-explanation">{{ action.explanation }}</p>
+
+          <div class="ga-meta-row">
+            <div class="ga-meta-item">
+              <strong>Expected evidence</strong>
+              <p>{{ action.expected_evidence }}</p>
+            </div>
+            {% if action.preconditions %}
+              <div class="ga-meta-item">
+                <strong>Preconditions</strong>
+                <ul>
+                  {% for pc in action.preconditions %}
+                    <li>{{ pc }}</li>
+                  {% endfor %}
+                </ul>
+              </div>
+            {% endif %}
+          </div>
+
+          {# Approval action buttons #}
+          {% if not approval or status == 'rejected' %}
+            <div class="ga-actions">
+              {% if action.approval_required %}
+                <div class="ga-approval-notice">
+                  <span class="ga-lock">🔒</span>
+                  Requires explicit approval before guidance is revealed.
+                </div>
+                <button class="btn btn-primary btn-sm"
+                  hx-post="/api/v1/validation/investigation-core/investigations/{{ investigation.investigation_id }}/actions/{{ action.action_id }}/approve"
+                  hx-vals='{"notes": null}'
+                  hx-target="#ga-{{ action.action_id }}"
+                  hx-swap="outerHTML"
+                  onclick="return confirm('Approve this guided action?\n\n{{ action.title }}\n\nYou confirm you have authorisation to test this target.')">
+                  ✓ Approve Action
+                </button>
+              {% else %}
+                <button class="btn btn-secondary btn-sm"
+                  hx-post="/api/v1/validation/investigation-core/investigations/{{ investigation.investigation_id }}/actions/{{ action.action_id }}/approve"
+                  hx-vals='{"notes": null}'
+                  hx-target="#ga-{{ action.action_id }}"
+                  hx-swap="outerHTML">
+                  View Guidance
+                </button>
+              {% endif %}
+            </div>
+          {% endif %}
+
+          {# Guidance — revealed after approval #}
+          {% if status == 'approved' and exec_ctx %}
+            <div class="ga-guidance">
+              <div class="ga-preamble">{{ exec_ctx.preamble }}</div>
+              <ol class="ga-steps">
+                {% for step in action.steps %}
+                  <li class="ga-step">
+                    <div class="ga-step-instruction">{{ step.instruction }}</div>
+                    {% if exec_ctx.show_examples and step.example %}
+                      <pre class="ga-step-example">{{ step.example }}</pre>
+                    {% endif %}
+                    {% if exec_ctx.show_expected_results and step.expected_result %}
+                      <div class="ga-step-result">
+                        <strong>Expected:</strong> {{ step.expected_result }}
+                      </div>
+                    {% endif %}
+                    {% if exec_ctx.show_evidence_prompts and step.capture_evidence %}
+                      <div class="ga-capture-prompt">
+                        📎 Capture evidence for this step in the Evidence tab.
+                      </div>
+                    {% endif %}
+                  </li>
+                {% endfor %}
+              </ol>
+
+              <div class="ga-remediation">
+                <strong>Defensive context</strong>
+                <p>{{ action.remediation_context }}</p>
+              </div>
+
+              {# Complete action #}
+              <div class="ga-complete-row">
+                <button class="btn btn-primary btn-sm"
+                  hx-post="/api/v1/validation/investigation-core/investigations/{{ investigation.investigation_id }}/actions/{{ action.action_id }}/complete"
+                  hx-vals='{"evidence_ids": []}'
+                  hx-target="#ga-{{ action.action_id }}"
+                  hx-swap="outerHTML">
+                  ✓ Mark Action Complete
+                </button>
+                <span style="font-size:.72rem;color:var(--text-muted);margin-left:.5rem;">
+                  Capture evidence in the Evidence tab first.
+                </span>
+              </div>
+            </div>
+          {% endif %}
+
+          {% if status == 'completed' %}
+            <div class="ga-done-row">
+              <span style="font-size:.78rem;color:var(--low);">
+                ✓ Completed — evidence captured and documented.
+              </span>
+            </div>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+</div>
+
+<style>
+.ga-panel    { padding: .25rem 0; }
+.ga-intro    { font-size: .78rem; color: var(--text-muted); margin-bottom: .75rem; }
+.ga-list     { display: flex; flex-direction: column; gap: .65rem; }
+.ga-card     {
+  background: var(--bg-raised); border: 1px solid var(--border);
+  border-radius: 6px; overflow: hidden;
+}
+.ga-card--low    { border-left: 3px solid var(--low); }
+.ga-card--medium { border-left: 3px solid var(--medium); }
+.ga-card--high   { border-left: 3px solid var(--high); }
+.ga-card--informational { border-left: 3px solid var(--text-muted); }
+.ga-card--done     { opacity: .7; }
+.ga-card--rejected { opacity: .55; }
+.ga-card--approved { border-color: var(--accent); }
+.ga-card-header {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  padding: .55rem .75rem; border-bottom: 1px solid var(--border); gap: .5rem;
+}
+.ga-title-row    { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; flex: 1; }
+.ga-title        { font-size: .82rem; font-weight: 600; }
+.ga-risk-badge   { font-size: .62rem; font-family: var(--mono); text-transform: uppercase; border-radius: 3px; padding: 1px 5px; border: 1px solid; }
+.ga-risk--informational { color: var(--text-muted); border-color: var(--text-muted); }
+.ga-risk--low    { color: var(--low); border-color: var(--low); }
+.ga-risk--medium { color: var(--medium); border-color: var(--medium); }
+.ga-risk--high   { color: var(--high); border-color: var(--high); }
+.ga-mode-badge   { font-size: .62rem; color: var(--text-muted); font-family: var(--mono); background: var(--bg-raised); border: 1px solid var(--border); border-radius: 3px; padding: 1px 5px; }
+.ga-explanation  { font-size: .78rem; color: var(--text-secondary); padding: .5rem .75rem; margin: 0; }
+.ga-meta-row     { display: flex; gap: 1rem; padding: 0 .75rem .5rem; flex-wrap: wrap; }
+.ga-meta-item    { flex: 1; min-width: 180px; font-size: .75rem; }
+.ga-meta-item strong { font-size: .68rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); display: block; margin-bottom: .2rem; }
+.ga-meta-item p, .ga-meta-item ul { margin: 0; color: var(--text-secondary); }
+.ga-meta-item ul { padding-left: 1rem; }
+.ga-meta-item li { margin-bottom: .15rem; }
+.ga-actions      { padding: .5rem .75rem; border-top: 1px solid var(--border); display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+.ga-approval-notice { font-size: .75rem; color: var(--text-muted); display: flex; align-items: center; gap: .3rem; }
+.ga-lock         { font-size: .85rem; }
+
+.ga-guidance     { padding: .65rem .75rem; border-top: 1px solid var(--border); background: color-mix(in srgb, var(--accent) 3%, transparent); }
+.ga-preamble     { font-size: .75rem; color: var(--text-muted); margin-bottom: .6rem; font-style: italic; }
+.ga-steps        { margin: 0 0 .75rem; padding-left: 1.25rem; display: flex; flex-direction: column; gap: .6rem; }
+.ga-step         { font-size: .78rem; }
+.ga-step-instruction { color: var(--text-secondary); }
+.ga-step-example {
+  font-family: var(--mono); font-size: .72rem; color: var(--text-primary);
+  background: color-mix(in srgb, black 20%, var(--bg-raised));
+  border: 1px solid var(--border); border-radius: 4px;
+  padding: .35rem .5rem; margin: .3rem 0; white-space: pre-wrap;
+  overflow-x: auto; word-break: break-all;
+}
+.ga-step-result  { font-size: .72rem; color: var(--text-muted); margin-top: .2rem; }
+.ga-step-result strong { color: var(--low); }
+.ga-capture-prompt { font-size: .7rem; color: var(--accent); margin-top: .2rem; }
+.ga-remediation  {
+  font-size: .75rem; border-top: 1px solid var(--border);
+  padding-top: .5rem; margin-top: .5rem;
+}
+.ga-remediation strong { font-size: .68rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); display: block; margin-bottom: .2rem; }
+.ga-remediation p { margin: 0; color: var(--text-secondary); }
+.ga-complete-row { margin-top: .65rem; display: flex; align-items: center; flex-wrap: wrap; border-top: 1px solid var(--border); padding-top: .6rem; }
+.ga-done-row     { padding: .5rem .75rem; font-size: .78rem; border-top: 1px solid var(--border); }
+.ga-status-col   { flex-shrink: 0; }
+</style>

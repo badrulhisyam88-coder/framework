@@ -1,0 +1,73 @@
+<table>
+  <thead>
+    <tr>
+      <th>Investigation ID</th>
+      <th>Target</th>
+      <th>State</th>
+      <th>Current Phase</th>
+      <th>Findings</th>
+      <th>Age</th>
+      <th>Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for inv in investigations %}
+    <tr>
+      <td>{{ inv.id }}</td>
+      <td>{{ inv.target }}</td>
+      <td class="state state-{{ inv.state }}">{{ inv.state }}</td>
+      <td>{{ inv.current_phase or "—" }}</td>
+      <td>{{ inv.findings_count }}</td>
+      <td>{{ inv.age_seconds }}</td>
+      <td>
+        {% if inv.state == "EXPLOIT_RUNNING" %}
+        <button
+          hx-post="/admin/exploitation/complete"
+          hx-vals='{"investigation_id": "{{ inv.id }}"}'
+          hx-headers='{"Content-Type": "application/json"}'
+          hx-target="closest table"
+          hx-swap="outerHTML"
+          style="font-size:0.8em;padding:2px 6px;cursor:pointer"
+          title="Mark exploitation phase complete for this investigation">
+          Mark Done
+        </button>
+        {% else %}
+        —
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    {% if not investigations %}
+    <tr><td colspan="7">No active investigations.</td></tr>
+    {% endif %}
+  </tbody>
+</table>
+
+{% if target_auth %}
+<h3 style="margin-top:1.2em">Session Auth</h3>
+<table>
+  <thead>
+    <tr><th>Target</th><th>Username</th><th>Status</th></tr>
+  </thead>
+  <tbody>
+    {% for base, info in target_auth.items() %}
+    <tr>
+      <td>{{ base }}</td>
+      <td>{{ info.username }}</td>
+      <td class="state {% if info.expired %}state-EXPIRED{% else %}state-RUNNING{% endif %}">
+        {% if info.expired %}EXPIRED — refresh required{% else %}active{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% if expired_targets %}
+<p style="margin-top:0.4em;color:#b45309;font-size:0.85em">
+  ⚠ {{ expired_targets|length }} session(s) expired.
+  Refresh via <code>POST /admin/session-auth/refresh</code> with
+  <code>{"target_base":"...", "auth":{...}}</code>.
+</p>
+{% endif %}
+{% endif %}
+
+<p class="last-updated">Last updated: {{ now_iso }}</p>

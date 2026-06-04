@@ -1,0 +1,50 @@
+<tr id="queue-row-{{ item.id }}">
+    <td class="mono">{{ item.asset_name or "—" }}</td>
+    <td class="mono">{{ item.host.ip if item.host else item.host_id[:8] }}</td>
+    <td class="mono">{{ item.service.port if item.service else "—" }}</td>
+    <td class="text-muted">{{ item.service.service_name if item.service else "—" }}
+        {% if item.service and item.service.version %}
+        <small class="text-muted">{{ item.service.version }}</small>{% endif %}
+    </td>
+    <td>
+        {% if item.cve %}
+        <a href="{{ item.cve.source_url }}" target="_blank" class="mono" style="color:var(--accent);font-size:12px;">
+            {{ item.cve_id }}
+        </a>
+        {% if item.cve.cvss_score %}
+        <span class="severity severity-{{ 'critical' if item.cve.cvss_score >= 9 else 'high' if item.cve.cvss_score >= 7 else 'medium' if item.cve.cvss_score >= 4 else 'low' }}">
+            {{ item.cve.cvss_score }}
+        </span>
+        {% endif %}
+        {% else %}—{% endif %}
+    </td>
+    <td class="mono" style="font-size:12px;">{{ item.validation_type }}</td>
+    <td><span class="qstatus qstatus-{{ item.status }}">{{ item.status }}</span></td>
+    <td class="text-muted mono" style="font-size:11px;">{{ item.created_at.strftime('%m-%d %H:%M') }}</td>
+    <td>
+        {% if item.status == 'pending' %}
+        <div class="flex gap-2">
+            <button class="btn btn-approve btn-sm"
+                hx-patch="/api/v1/validation/queue/{{ item.id }}/approve"
+                hx-vals='{"notes": ""}'
+                hx-target="#queue-row-{{ item.id }}"
+                hx-swap="outerHTML"
+                hx-indicator="#spinner-{{ item.id }}">
+                <span class="htmx-indicator" id="spinner-{{ item.id }}"><span class="spinner"></span></span>
+                ✓ Approve
+            </button>
+            <button class="btn btn-reject btn-sm"
+                hx-patch="/api/v1/validation/queue/{{ item.id }}/reject"
+                hx-vals='{"notes": ""}'
+                hx-target="#queue-row-{{ item.id }}"
+                hx-swap="outerHTML">
+                ✕ Reject
+            </button>
+        </div>
+        {% elif item.status == 'completed' and finding %}
+        <a href="/api/v1/validation/findings/{{ finding.id }}" class="btn btn-secondary btn-sm">View Finding</a>
+        {% else %}
+        <span class="text-muted" style="font-size:12px;">{{ item.status }}</span>
+        {% endif %}
+    </td>
+</tr>

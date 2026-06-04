@@ -1,0 +1,49 @@
+<div class="card">
+    <div class="card-title">Scan complete</div>
+    <p class="text-muted" style="margin-bottom:12px;">
+        Target <span class="mono">{{ result.target }}</span> scanned in
+        <span class="mono">{{ "%.1f"|format(result.duration_ms / 1000) }}s</span>.
+    </p>
+    <div class="stats-row">
+        <div class="stat-card">
+            <div class="stat-value">{{ result.hosts_found }}</div>
+            <div class="stat-label">Hosts Found</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ result.services_found }}</div>
+            <div class="stat-label">Services Found</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ result.new_hosts }}</div>
+            <div class="stat-label">New Hosts</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ result.new_services }}</div>
+            <div class="stat-label">New Services</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ result.queue_items_created }}</div>
+            <div class="stat-label">Queue Items</div>
+        </div>
+    </div>
+    {% if result.queue_items_created > 0 %}
+    <p style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap;">
+        {# Primary: stay in investigation context for this target #}
+        <a href="/api/v1/validation/investigations/workspace?target={{ result.target | urlencode }}"
+           class="btn btn-primary">
+            Open Investigation →
+        </a>
+        {# Secondary: full queue view if user wants global context #}
+        <a href="/api/v1/validation/queue?status=pending" class="btn btn-secondary">
+            View Full Queue
+        </a>
+    </p>
+    {% else %}
+    <p style="margin-top:16px;">
+        <a href="/api/v1/validation/investigations/workspace?target={{ result.target | urlencode }}"
+           class="btn btn-secondary">
+            Open Investigation →
+        </a>
+    </p>
+    {% endif %}
+</div>

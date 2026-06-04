@@ -1,0 +1,36 @@
+<div class="sub-table">
+    {% if services %}
+    <table>
+        <thead>
+            <tr>
+                <th>Port</th>
+                <th>Protocol</th>
+                <th>Service</th>
+                <th>Product</th>
+                <th>Version</th>
+                <th>Banner</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for svc in services %}
+            <tr>
+                <td class="mono">{{ svc.port }}</td>
+                <td class="mono text-muted">{{ svc.protocol }}</td>
+                <td class="mono">{{ svc.service_name or "—" }}</td>
+                <td>{{ svc.product or "—" }}</td>
+                <td class="mono text-muted">{{ svc.version or "—" }}</td>
+                <td class="text-muted" style="font-size:11px;">{{ svc.banner or "—" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="empty-state" style="margin:0;">No services recorded for this host.</p>
+    {% endif %}
+    <div style="margin-top:10px;">
+        <a class="btn btn-secondary btn-sm"
+           href="/api/v1/validation/queue?host={{ host_id }}">
+            View Queue Items →
+        </a>
+    </div>
+</div>

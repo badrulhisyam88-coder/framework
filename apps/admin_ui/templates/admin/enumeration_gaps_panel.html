@@ -1,0 +1,33 @@
+{% extends "admin/base.html" %}
+{% block content %}
+<h1>Enumeration Gaps</h1>
+<p class="subtitle">Findings where a rule could not classify because required evidence was absent.
+Use this to identify which recon engines need enrichment.</p>
+<div id="gaps-container">
+  {% if gaps %}
+  <table>
+    <thead>
+      <tr>
+        <th>Reason</th>
+        <th>Findings</th>
+        <th>First seen</th>
+        <th>Last seen</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for gap in gaps %}
+      <tr>
+        <td class="reason">{{ gap.reason }}</td>
+        <td class="count">{{ gap.count }}</td>
+        <td class="date">{{ gap.first_seen }}</td>
+        <td class="date">{{ gap.last_seen }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">No enumeration gaps recorded. Rules have classified all findings.</p>
+  {% endif %}
+</div>
+<p class="updated">Updated: {{ now_iso }}</p>
+{% endblock %}

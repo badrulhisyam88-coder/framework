@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Findings — AI Assist Tool{% endblock %}
+{% block heading %}Findings{% endblock %}
+{% block content %}
+<div class="stats-row">
+    <div class="stat-card" style="border-color:rgba(239,68,68,0.3)"><div class="stat-value" style="color:var(--critical)">{{ severity_counts.get('critical',0) }}</div><div class="stat-label">Critical</div></div>
+    <div class="stat-card" style="border-color:rgba(249,115,22,0.3)"><div class="stat-value" style="color:var(--high)">{{ severity_counts.get('high',0) }}</div><div class="stat-label">High</div></div>
+    <div class="stat-card" style="border-color:rgba(234,179,8,0.3)"><div class="stat-value" style="color:var(--medium)">{{ severity_counts.get('medium',0) }}</div><div class="stat-label">Medium</div></div>
+    <div class="stat-card" style="border-color:rgba(34,197,94,0.3)"><div class="stat-value" style="color:var(--low)">{{ severity_counts.get('low',0) }}</div><div class="stat-label">Low</div></div>
+    <div class="stat-card"><div class="stat-value">{{ status_counts.get('validated_exploitable',0) }}</div><div class="stat-label">Confirmed</div></div>
+    <div class="stat-card"><div class="stat-value">{{ status_counts.get('validated_not_exploitable',0) }}</div><div class="stat-label">Not Exploitable</div></div>
+</div>
+<div class="card">
+    <div class="card-title">All Findings</div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr><th>Host</th><th>Port</th><th>Type</th><th>CVE</th><th>Severity</th><th>Result</th><th>Status</th><th>Time</th><th></th></tr>
+            </thead>
+            <tbody>
+                {% for f in findings %}
+                <tr>
+                    <td class="mono">{{ f.host.ip if f.host else f.host_id[:8] }}</td>
+                    <td class="mono">{{ f.service.port if f.service else "—" }}</td>
+                    <td class="mono" style="font-size:12px;">{{ f.finding_type }}</td>
+                    <td>{% if f.cve_id %}<span class="mono" style="font-size:12px;">{{ f.cve_id }}</span>{% else %}—{% endif %}</td>
+                    <td><span class="severity severity-{{ f.severity }}">{{ f.severity }}</span></td>
+                    <td>
+                        {% if f.validation_status == 'validated_exploitable' %}
+                        <span class="vstatus vstatus-exploitable">● EXPLOITABLE</span>
+                        {% elif f.validation_status == 'validated_not_exploitable' %}
+                        <span class="vstatus vstatus-not-exploitable">● NOT EXPLOITABLE</span>
+                        {% else %}
+                        <span class="vstatus vstatus-matched">◌ MATCHED</span>
+                        {% endif %}
+                    </td>
+                    <td><span class="qstatus qstatus-{{ f.status }}">{{ f.status }}</span></td>
+                    <td class="text-muted mono" style="font-size:11px;">{{ f.timestamp.strftime('%m-%d %H:%M') }}</td>
+                    <td><a href="/api/v1/validation/findings/{{ f.id }}" class="btn btn-secondary btn-sm">Detail</a></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="9" class="empty-state">No findings yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,23 @@
+service: http/https
+cms: wordpress
+checks:
+  - name: sqli_exposure
+    plugin: wordpress_plugin
+    description: Probe common WordPress endpoints for SQL error disclosure
+    severity_on_match: high
+  - name: version_disclosure
+    plugin: wordpress_plugin
+    description: Look for generator meta tag and feed generator element
+    severity_on_match: medium
+  - name: user_enum
+    plugin: wordpress_plugin
+    description: Test author=1 redirect for admin username exposure
+    severity_on_match: low
+  - name: xmlrpc
+    plugin: wordpress_plugin
+    description: Check xmlrpc.php availability and method enumeration
+    severity_on_match: medium
+  - name: config_exposure
+    plugin: wordpress_plugin
+    description: Check whether wp-config.php or backups are publicly readable
+    severity_on_match: critical

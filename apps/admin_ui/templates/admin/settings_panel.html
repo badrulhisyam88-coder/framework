@@ -1,0 +1,92 @@
+{% extends "admin/base.html" %}
+{% block content %}
+<h1>Dashboard</h1>
+
+{# ── Section 1: System Health ───────────────────────────────────────────── #}
+<h2>System Health</h2>
+<div id="ai-health-container"
+     hx-get="/admin/ai/ping"
+     hx-trigger="load"
+     hx-swap="innerHTML">
+  <span style="color:#888;">checking AI status…</span>
+</div>
+
+{# htmx result for /admin/ai/ping is JSON — rendered via OOB swap in JS.
+   Instead use a small polling div that hits the JSON endpoint and updates. #}
+<script>
+(function () {
+  function _renderHealth(data) {
+    var el = document.getElementById('ai-health-container');
+    if (!el) return;
+    var ok = data && data.status === 'ok';
+    var badge = ok
+      ? '<span style="background:#16a34a;color:#fff;border-radius:3px;padding:2px 8px;font-size:12px;font-weight:600;">OK</span>'
+      : '<span style="background:#dc2626;color:#fff;border-radius:3px;padding:2px 8px;font-size:12px;font-weight:600;">UNAVAILABLE</span>';
+    var model = (data && data.model) ? data.model : '—';
+    var ms    = (data && data.response_time_ms !== undefined) ? data.response_time_ms + ' ms' : '—';
+    el.innerHTML =
+      '<table style="width:auto;margin:0;">' +
+      '<tr><td style="padding:4px 12px 4px 0;color:#888;">AI status</td><td>' + badge + '</td></tr>' +
+      '<tr><td style="padding:4px 12px 4px 0;color:#888;">LLM model</td><td><code>' + model + '</code></td></tr>' +
+      '<tr><td style="padding:4px 12px 4px 0;color:#888;">Response time</td><td>' + ms + '</td></tr>' +
+      '</table>';
+  }
+  fetch('/admin/ai/ping')
+    .then(function (r) { return r.json(); })
+    .then(_renderHealth)
+    .catch(function () {
+      var el = document.getElementById('ai-health-container');
+      if (el) el.innerHTML = '<span style="color:#dc2626;">AI ping failed</span>';
+    });
+})();
+</script>
+
+{# ── Section 2: Model Configuration ────────────────────────────────────── #}
+<h2 style="margin-top:2rem;">Model Configuration</h2>
+<div id="model-settings-container">
+  {% include "admin/_model_settings_form.html" %}
+</div>
+
+{# ── Section 3: Knowledge Vault ─────────────────────────────────────────── #}
+<h2 style="margin-top:2rem;">Knowledge Vault</h2>
+<div id="vault-status-container">
+  <span style="color:#888;">loading vault status…</span>
+</div>
+<div id="vault-rebuild-container" style="margin-top:0.75rem;">
+  <button
+    hx-post="/admin/vault/rebuild"
+    hx-target="#vault-rebuild-result"
+    hx-swap="innerHTML"
+    hx-on::after-request="window._refreshVaultStatus && window._refreshVaultStatus()">
+    Rebuild Vault Index
+  </button>
+  <span class="htmx-indicator" style="margin-left:0.5rem;color:#888;">rebuilding…</span>
+  <div id="vault-rebuild-result" style="margin-top:0.5rem;"></div>
+</div>
+<script>
+window._refreshVaultStatus = function () {
+  fetch('/admin/vault/status')
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      var el = document.getElementById('vault-status-container');
+      if (!el) return;
+      el.innerHTML =
+        '<table style="width:auto;margin:0;">' +
+        '<tr><td style="padding:4px 12px 4px 0;color:#888;">ChromaDB entries</td><td><strong>' + data.count + '</strong></td></tr>' +
+        '<tr><td style="padding:4px 12px 4px 0;color:#888;">Last rebuild</td><td>' + data.last_rebuild + '</td></tr>' +
+        '</table>';
+    })
+    .catch(function () {
+      var el = document.getElementById('vault-status-container');
+      if (el) el.innerHTML = '<span style="color:#888;">vault status unavailable</span>';
+    });
+};
+window._refreshVaultStatus();
+</script>
+
+{# ── Section 4: Gate Configuration ─────────────────────────────────────── #}
+<h2 style="margin-top:2rem;">Gate Configuration</h2>
+<div id="settings-container">
+  {% include "admin/_settings_table.html" %}
+</div>
+{% endblock %}

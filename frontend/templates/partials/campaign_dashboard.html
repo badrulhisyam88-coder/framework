@@ -1,0 +1,262 @@
+{#
+  Partial: campaign_dashboard.html
+  Multi-stage campaign progress summary. Investigation-centric, not enterprise.
+
+  Context: campaign, members[{membership, investigation_title, stage_label}],
+           snapshot, stage_labels, stage_order, status_labels
+#}
+<div class="camp-panel">
+
+  <div class="camp-header">
+    <div class="camp-headline">
+      <span class="camp-icon">◆</span>
+      <span class="camp-title">{{ campaign.title }}</span>
+      <span class="camp-status camp-status--{{ campaign.status }}">
+        {{ status_labels[campaign.status] }}
+      </span>
+    </div>
+    {% if campaign.description %}
+    <div class="camp-desc">{{ campaign.description }}</div>
+    {% endif %}
+  </div>
+
+  {# ── Snapshot summary row ──────────────────────────────────────────── #}
+  <div class="camp-metrics">
+    <div class="camp-metric">
+      <div class="camp-metric-label">Investigations</div>
+      <div class="camp-metric-value mono">{{ snapshot.total_investigations }}</div>
+    </div>
+    <div class="camp-metric">
+      <div class="camp-metric-label">Milestones</div>
+      <div class="camp-metric-value mono">{{ snapshot.total_milestones }}</div>
+    </div>
+    <div class="camp-metric">
+      <div class="camp-metric-label">Actions completed</div>
+      <div class="camp-metric-value mono">{{ snapshot.total_actions_completed }}</div>
+    </div>
+    <div class="camp-metric">
+      <div class="camp-metric-label">Evidence</div>
+      <div class="camp-metric-value mono">{{ snapshot.total_evidence_artifacts }}</div>
+    </div>
+    <div class="camp-metric">
+      <div class="camp-metric-label">Findings</div>
+      <div class="camp-metric-value mono">{{ snapshot.total_findings }}</div>
+    </div>
+  </div>
+
+  {# ── Stage progression ─────────────────────────────────────────────── #}
+  <section class="camp-section">
+    <h4 class="camp-section-title">Stage progression</h4>
+    <div class="camp-stage-row">
+      {% for sp in snapshot.investigations_by_stage %}
+      <div class="camp-stage {% if sp.investigation_count > 0 %}camp-stage--active{% endif %}">
+        <span class="camp-stage-name">{{ sp.label }}</span>
+        <span class="camp-stage-count mono">{{ sp.investigation_count }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  {# ── Aggregated themes ─────────────────────────────────────────────── #}
+  {% if snapshot.aggregated_themes %}
+  <section class="camp-section">
+    <h4 class="camp-section-title">Recurring themes across campaign</h4>
+    <ul class="camp-list">
+      {% for t in snapshot.aggregated_themes %}
+      <li class="camp-row">
+        <span class="camp-label">{{ t.label }}</span>
+        <span class="camp-stat mono">
+          {{ t.investigations_count }} investigation(s)
+          · {{ t.total_findings }} finding(s)
+        </span>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {# ── Remediation gaps ─────────────────────────────────────────────── #}
+  {% if snapshot.common_remediation_gaps %}
+  <section class="camp-section">
+    <h4 class="camp-section-title">Common remediation gaps</h4>
+    <p class="camp-section-note">
+      Concepts surfaced across investigations but documented in fewer than half.
+    </p>
+    <ul class="camp-list">
+      {% for g in snapshot.common_remediation_gaps %}
+      <li class="camp-row">
+        <span class="camp-label">{{ g.concept }}</span>
+        <span class="camp-stat mono">
+          surfaced in {{ g.surfaced_in_investigations }} · documented in {{ g.documented_in_investigations }}
+        </span>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {# ── Objectives ────────────────────────────────────────────────────── #}
+  {% if campaign.objectives %}
+  <section class="camp-section">
+    <h4 class="camp-section-title">Campaign objectives</h4>
+    {% for obj in campaign.objectives %}
+    <div class="camp-objective camp-objective--{{ obj.status }}">
+      <div class="camp-objective-head">
+        <span class="camp-objective-status">
+          {% if obj.status == 'completed' %}✓{% elif obj.status == 'in_progress' %}◉{% else %}○{% endif %}
+        </span>
+        <span class="camp-objective-title">{{ obj.title }}</span>
+      </div>
+      {% if obj.description %}
+      <div class="camp-objective-desc">{{ obj.description }}</div>
+      {% endif %}
+      {% if obj.sub_objectives %}
+      <ul class="camp-sub-list">
+        {% for sub in obj.sub_objectives %}
+        <li class="camp-sub camp-sub--{{ sub.status }}">
+          <span class="camp-sub-icon">
+            {% if sub.status == 'completed' %}✓{% elif sub.status == 'in_progress' %}◉{% else %}○{% endif %}
+          </span>
+          <span class="camp-sub-title">{{ sub.title }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </section>
+  {% endif %}
+
+  {# ── Strengths + unresolved ──────────────────────────────────────── #}
+  {% if snapshot.strengths or snapshot.unresolved_weaknesses %}
+  <section class="camp-section camp-summary">
+    {% if snapshot.strengths %}
+    <div class="camp-summary-block camp-strengths">
+      <span class="camp-summary-label">Strengths</span>
+      <ul>
+        {% for s in snapshot.strengths %}<li>✓ {{ s }}</li>{% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+    {% if snapshot.unresolved_weaknesses %}
+    <div class="camp-summary-block camp-gaps">
+      <span class="camp-summary-label">Unresolved</span>
+      <ul>
+        {% for s in snapshot.unresolved_weaknesses %}<li>⚠ {{ s }}</li>{% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  {# ── Member investigations ───────────────────────────────────────── #}
+  <section class="camp-section">
+    <h4 class="camp-section-title">Member investigations</h4>
+    {% if not members %}
+      <div class="camp-empty">No investigations attached yet.</div>
+    {% else %}
+    <ul class="camp-member-list">
+      {% for mv in members %}
+      <li class="camp-member camp-member-stage--{{ mv.membership.stage }}">
+        <span class="camp-member-stage">{{ mv.stage_label }}</span>
+        <span class="camp-member-title">{{ mv.investigation_title }}</span>
+        <span class="camp-member-meta mono">
+          {% if mv.membership.parent_investigation_id %}
+            spawned from {{ mv.membership.parent_investigation_id[:8] }}…
+          {% endif %}
+          joined {{ mv.membership.joined_at.strftime('%Y-%m-%d %H:%M') }}
+        </span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </section>
+
+</div>
+
+<style>
+.camp-panel { display: flex; flex-direction: column; gap: .7rem;
+              padding: .8rem 1rem; background: var(--bg-raised);
+              border: 1px solid var(--border); border-radius: 5px; }
+.camp-header { padding-bottom: .5rem; border-bottom: 1px solid var(--border); }
+.camp-headline { display: flex; align-items: baseline; gap: .5rem; }
+.camp-icon { color: var(--accent); font-size: 1rem; }
+.camp-title { font-size: .95rem; font-weight: 600; flex: 1; }
+.camp-desc  { font-size: .72rem; color: var(--text-secondary); margin-top: .25rem; line-height: 1.5; }
+.camp-status { font-size: .6rem; padding: 2px 7px; border-radius: 3px;
+               font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.camp-status--planning   { background: color-mix(in srgb, var(--text-muted) 15%, transparent); color: var(--text-muted); }
+.camp-status--active     { background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--accent); }
+.camp-status--paused     { background: color-mix(in srgb, var(--medium) 20%, transparent); color: var(--medium); }
+.camp-status--completed  { background: color-mix(in srgb, var(--low) 25%, transparent); color: var(--low); }
+
+.camp-metrics { display: flex; gap: .8rem; flex-wrap: wrap;
+                padding: .35rem 0; border-bottom: 1px dashed color-mix(in srgb, var(--border) 60%, transparent); }
+.camp-metric { flex: 1; min-width: 6rem; }
+.camp-metric-label { font-size: .58rem; color: var(--text-muted); font-weight: 600;
+                     text-transform: uppercase; letter-spacing: .05em; }
+.camp-metric-value { font-size: 1rem; font-weight: 600; }
+
+.camp-section { display: flex; flex-direction: column; gap: .25rem; }
+.camp-section-title { font-size: .7rem; font-weight: 600; margin: 0;
+                      color: var(--text-secondary); text-transform: uppercase;
+                      letter-spacing: .04em; }
+.camp-section-note { font-size: .62rem; color: var(--text-muted); margin: 0 0 .15rem; font-style: italic; }
+
+.camp-stage-row { display: flex; gap: .25rem; flex-wrap: wrap; }
+.camp-stage { display: flex; flex-direction: column; align-items: center;
+              padding: .35rem .6rem; border-radius: 3px; font-size: .65rem;
+              background: var(--bg-raised); border: 1px solid var(--border);
+              min-width: 5rem; opacity: .5; }
+.camp-stage--active { opacity: 1; border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+                      background: color-mix(in srgb, var(--accent) 5%, var(--bg-raised)); }
+.camp-stage-name { font-weight: 600; text-align: center; line-height: 1.2; }
+.camp-stage-count { font-size: .9rem; margin-top: .2rem; color: var(--accent); }
+
+.camp-list { list-style: none; margin: 0; padding: 0; }
+.camp-row { display: flex; gap: .5rem; align-items: baseline; padding: .2rem 0;
+            border-bottom: 1px dashed color-mix(in srgb, var(--border) 60%, transparent);
+            font-size: .68rem; }
+.camp-row:last-child { border-bottom: none; }
+.camp-label { flex: 1; }
+.camp-stat { color: var(--text-muted); }
+
+.camp-objective { padding: .35rem .5rem; background: var(--bg-raised);
+                  border: 1px solid var(--border); border-radius: 3px; margin-bottom: .25rem; }
+.camp-objective--completed   { border-left: 3px solid var(--low); }
+.camp-objective--in_progress { border-left: 3px solid var(--accent); }
+.camp-objective--not_started { border-left: 3px solid var(--text-muted); }
+.camp-objective-head  { display: flex; gap: .35rem; align-items: baseline; font-size: .72rem; }
+.camp-objective-status { font-weight: 700; }
+.camp-objective-title  { font-weight: 600; flex: 1; }
+.camp-objective-desc   { font-size: .65rem; color: var(--text-muted); margin-top: .15rem; }
+.camp-sub-list { list-style: none; margin: .3rem 0 0; padding-left: 1.2rem; font-size: .68rem; }
+.camp-sub { display: flex; gap: .3rem; padding: .1rem 0; }
+.camp-sub--completed .camp-sub-title { color: var(--low); text-decoration: line-through; }
+.camp-sub-icon { width: 1rem; text-align: center; }
+
+.camp-summary { display: flex; gap: 1rem; flex-wrap: wrap; padding-top: .35rem;
+                border-top: 1px dashed color-mix(in srgb, var(--border) 60%, transparent); }
+.camp-summary-block { flex: 1; min-width: 14rem; }
+.camp-summary-label { display: block; font-size: .58rem; color: var(--text-muted);
+                      font-weight: 600; text-transform: uppercase; letter-spacing: .05em;
+                      margin-bottom: .15rem; }
+.camp-summary-block ul { list-style: none; margin: 0; padding: 0; font-size: .67rem; }
+.camp-strengths li { color: var(--low); line-height: 1.5; }
+.camp-gaps li      { color: var(--medium); line-height: 1.5; }
+
+.camp-empty { font-size: .7rem; color: var(--text-muted); padding: .5rem 0; font-style: italic; }
+
+.camp-member-list { list-style: none; margin: 0; padding: 0; }
+.camp-member { display: flex; gap: .5rem; align-items: baseline; padding: .25rem 0;
+               border-bottom: 1px dashed color-mix(in srgb, var(--border) 60%, transparent);
+               font-size: .7rem; }
+.camp-member:last-child { border-bottom: none; }
+.camp-member-stage { font-size: .56rem; padding: 1px 6px; border-radius: 3px;
+                     font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
+                     background: color-mix(in srgb, var(--accent) 12%, var(--bg-raised));
+                     border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--border));
+                     color: var(--accent); min-width: 5.5rem; text-align: center; }
+.camp-member-title { font-weight: 600; flex: 1; }
+.camp-member-meta  { font-size: .58rem; color: var(--text-muted); }
+</style>

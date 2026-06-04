@@ -1,0 +1,88 @@
+{# Phase 57d — Capture bundle side panel, expired-state variant.
+
+   Rendered when the user clicks a bundle-{id} node whose underlying
+   bundle is no longer in _BUNDLES (typical cause: backend restart
+   cleared in-memory state). Distinct from the regular capture_bundle
+   panel — calls out the lifecycle event and tells the operator how
+   to recover.
+
+   Context:
+     bundle_id          — the {id} from the node prefix
+     investigation_id   — surrounding investigation
+     node_id            — full "bundle-{id}" id
+#}
+<div class="space-y-3 text-[#1f2328] text-xs">
+
+  {# ── Header ──────────────────────────────────────────────── #}
+  <div>
+    <div class="text-zinc-500 uppercase text-[10px] tracking-wide mb-0.5">
+      capture bundle
+    </div>
+    <div class="flex items-center gap-2 mt-1">
+      <span class="text-amber-700 text-base">⌛</span>
+      <span class="text-sm font-semibold text-[#1f2328]">Bundle expired</span>
+      <span class="text-[9px] px-1.5 py-0.5 rounded
+                   bg-amber-100 text-amber-800 font-medium">
+        not in memory
+      </span>
+    </div>
+    <div class="text-[10px] text-zinc-500 mt-1">
+      bundle id <code class="text-[#656d76]">{{ bundle_id }}</code>
+    </div>
+  </div>
+
+  {# ── Explanation ──────────────────────────────────────────── #}
+  <div class="rounded border border-amber-900/40 bg-[#0d1117] p-3">
+    <p class="text-[11px] text-zinc-300 leading-relaxed">
+      This Capture bundle was created during a previous backend session
+      and is no longer available. Captured artifacts (request/response
+      bodies, JWTs, post-exploit responses) live in memory only and are
+      cleared on backend restart.
+    </p>
+    <p class="text-[11px] text-zinc-300 leading-relaxed mt-2">
+      The Capture node remains in the graph because it's part of the
+      investigation's persistent lineage. Only its <em>contents</em>
+      were transient.
+    </p>
+  </div>
+
+  {# ── Recommended action ────────────────────────────────────── #}
+  <div>
+    <div class="text-zinc-500 uppercase text-[10px] tracking-wide mb-1">
+      Recommended next step
+    </div>
+    <p class="text-[11px] text-[#1f2328] leading-relaxed">
+      Re-run the action that produced this bundle to regenerate the
+      artifacts. A direct &ldquo;Re-run&rdquo; button is not available
+      from this panel because the bundle expired with the run record
+      that knew which action_kind produced it &mdash; click back to the
+      upstream Outcome &rarr; Action chain and re-execute the
+      suggestion from the finding panel.
+    </p>
+  </div>
+
+  {# ── Detail / debugging ──────────────────────────────────── #}
+  <details class="rounded border border-zinc-800 bg-[#0d1117]">
+    <summary class="cursor-pointer px-2 py-1.5 text-[10px] text-zinc-400
+                    hover:text-zinc-200">
+      Why does this happen?
+    </summary>
+    <div class="px-2 pb-2">
+      <p class="text-[10px] text-zinc-500 leading-relaxed">
+        Capture bundles live in the backend's process memory
+        (the <code>_BUNDLES</code> registry in
+        <code>apps/investigation_workspace/capture/bundler.py</code>).
+        This is the same lifecycle as <code>_RUNS</code> in
+        <code>execution/runtime.py</code> &mdash; persistent forensic
+        memory was deferred to keep restarts cheap during early
+        development. Long-running investigations will lose bundle
+        contents on every backend restart.
+      </p>
+      <p class="text-[10px] text-zinc-500 leading-relaxed mt-1">
+        Persistence (writing bundles to disk / DB so they survive
+        restart) is tracked as a future PR.
+      </p>
+    </div>
+  </details>
+
+</div>

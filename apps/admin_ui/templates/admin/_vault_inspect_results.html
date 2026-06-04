@@ -1,0 +1,52 @@
+{% if error %}
+<div style="color:#dc2626;background:#fef2f2;border:1px solid #fca5a5;border-radius:4px;padding:10px 14px;">
+  <strong>Error:</strong> {{ error }}
+</div>
+{% elif unavailable %}
+<div style="color:#92400e;background:#fffbeb;border:1px solid #fcd34d;border-radius:4px;padding:10px 14px;">
+  Vault unavailable — ChromaDB not reachable or collection is empty.
+  Check that the vault is mounted and the index has been built
+  (<a href="/admin/settings">Dashboard → Rebuild Vault Index</a>).
+</div>
+{% elif not results %}
+<div style="color:#888;">No results returned for query: <code>{{ query }}</code></div>
+{% else %}
+<p style="color:#666;font-size:0.85em;margin-bottom:0.5rem;">
+  Showing top {{ results|length }} of {{ top_k }} requested for: <code>{{ query }}</code>
+</p>
+<table style="width:100%;border-collapse:collapse;font-size:0.88em;">
+  <thead>
+    <tr style="background:#f6f8fa;border-bottom:2px solid #d0d7de;">
+      <th style="padding:6px 10px;text-align:right;white-space:nowrap;">Rank</th>
+      <th style="padding:6px 10px;text-align:left;">Document ID</th>
+      <th style="padding:6px 10px;text-align:left;">Title</th>
+      <th style="padding:6px 10px;text-align:right;white-space:nowrap;">Similarity</th>
+      <th style="padding:6px 10px;text-align:right;white-space:nowrap;">Distance</th>
+      <th style="padding:6px 10px;text-align:left;">Snippet (200 chars)</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in results %}
+    <tr style="border-bottom:1px solid #e8eaed;{% if loop.index is odd %}background:#fafafa;{% endif %}">
+      <td style="padding:6px 10px;text-align:right;color:#888;">{{ r.rank }}</td>
+      <td style="padding:6px 10px;font-family:monospace;font-size:0.85em;white-space:nowrap;">{{ r.doc_id }}</td>
+      <td style="padding:6px 10px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ r.title }}">{{ r.title or "—" }}</td>
+      <td style="padding:6px 10px;text-align:right;font-family:monospace;
+        {% if r.similarity >= 0.9 %}color:#16a34a;font-weight:600;
+        {% elif r.similarity >= 0.7 %}color:#2563eb;
+        {% else %}color:#888;{% endif %}">
+        {{ "%.4f"|format(r.similarity) }}
+      </td>
+      <td style="padding:6px 10px;text-align:right;font-family:monospace;color:#888;">
+        {{ "%.4f"|format(r.distance) }}
+      </td>
+      <td style="padding:6px 10px;max-width:320px;font-size:0.82em;color:#444;
+                 overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+          title="{{ r.snippet }}">
+        {{ r.snippet }}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}

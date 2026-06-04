@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — AI Assist Tool{% endblock %}
+{% block heading %}Operations Overview{% endblock %}
+
+{% block actions %}
+<a class="btn btn-primary" href="/api/v1/validation/investigations">View Investigations</a>
+{% endblock %}
+
+{% block content %}
+
+{# ── Operational status row ─────────────────────────────────────────── #}
+<div class="ops-grid">
+
+    <div class="ops-card {% if critical_high_count > 0 %}ops-card-critical{% else %}ops-card-ok{% endif %}">
+        <div class="ops-value">{{ open_findings_count }}</div>
+        <div class="ops-label">Open Findings</div>
+        {% if critical_high_count > 0 %}
+        <div class="ops-sub" style="color:var(--critical);">{{ critical_high_count }} critical/high</div>
+        <a class="ops-action-link" href="/api/v1/validation/investigations">Review in workspace →</a>
+        {% else %}
+        <div class="ops-sub">No critical/high findings</div>
+        {% endif %}
+    </div>
+
+    <div class="ops-card {% if pending_queue_count > 0 %}ops-card-warn{% else %}ops-card-neutral{% endif %}">
+        <div class="ops-value">{{ pending_queue_count }}</div>
+        <div class="ops-label">Pending Validation</div>
+        {% if pending_queue_count > 0 %}
+        <div class="ops-sub" style="color:var(--medium);">Queue items waiting</div>
+        <a class="ops-action-link" href="/api/v1/validation/investigations">Approve in workspace →</a>
+        {% else %}
+        <div class="ops-sub">Validation queue clear</div>
+        {% endif %}
+    </div>
+
+    <div class="ops-card ops-card-accent">
+        <div class="ops-value">{{ total_hosts }}</div>
+        <div class="ops-label">Hosts Tracked</div>
+        <div class="ops-sub">{{ total_services }} services detected</div>
+        {% if last_scan_target %}
+        <div class="ops-sub" style="margin-top:4px;">Last: {{ last_scan_target }} {{ last_scan_ago }}</div>
+        {% endif %}
+    </div>
+
+    <div class="ops-card ops-card-neutral">
+        <div class="ops-value">{{ total_hosts }}</div>
+        <div class="ops-label">Infrastructure</div>
+        <a class="ops-action-link" href="/api/v1/validation/investigations">Open Investigations →</a>
+    </div>
+
+</div>
+
+{# ── Two-column main area ────────────────────────────────────────────── #}
+<div style="display:grid;grid-template-columns:1fr 1.5fr;gap:16px;align-items:start;">
+
+    {# Left: Critical findings + quick actions #}
+    <div style="display:flex;flex-direction:column;gap:16px;">
+
+        {% if open_findings %}
+        <div class="card">
+            <div class="card-title">Highest Priority Findings</div>
+            <div style="display:flex;flex-direction:column;gap:6px;">
+                {% for f in open_findings[:6] %}
+                <a href="/api/v1/validation/investigations/workspace?target={{ f.host.ip if f.host else f.host_id }}#findings"
+                   style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--bg-raised);border:1px solid var(--border);border-radius:var(--radius);text-decoration:none;transition:background 0.1s;"
+                   onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background='var(--bg-raised)'">
+                    <span class="severity severity-{{ f.severity }}">{{ f.severity[:4] }}</span>
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-family:var(--mono);font-size:12px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                            {{ f.finding_type }}
+                        </div>
+                        <div style="font-size:11px;color:var(--text-muted);">
+                            {{ f.host.ip if f.host else f.host_id[:8] }}{% if f.service %}:{{ f.service.port }}{% endif %}
+                            {% if f.asset_name %} · {{ f.asset_name }}{% endif %}
+                        </div>
+                    </div>
+                    {% if f.validation_status == 'validated_exploitable' %}
+                    <span class="vstatus vstatus-exploitable" style="font-size:10px;padding:2px 6px;">EXPLOITABLE</span>
+                    {% elif f.validation_status == 'cve_matched' %}
+                    <span class="vstatus vstatus-matched" style="font-size:10px;padding:2px 6px;">MATCHED</span>
+                    {% endif %}
+                </a>
+                {% endfor %}
+                {% if open_findings | length > 6 %}
+                <a href="/api/v1/validation/investigations"
+                   style="text-align:center;font-size:12px;color:var(--accent);padding:6px;text-decoration:none;font-family:var(--mono);">
+                    View all {{ open_findings | length }} findings in workspace →
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        {% else %}
+        <div class="card" style="text-align:center;padding:32px 16px;">
+            <div style="font-size:28px;margin-bottom:8px;">✓</div>
+            <p style="font-family:var(--mono);font-size:13px;color:var(--low);">No open findings</p>
+            <p style="font-size:12px;color:var(--text-muted);margin-top:4px;">System looks clean</p>
+        </div>
+        {% endif %}
+
+        {# Infrastructure health #}
+        <div class="card">
+            <div class="card-title">Infrastructure Health</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <div>
+                    <div class="evidence-label" style="margin-bottom:6px;color:var(--critical);">Critical Issues</div>
+                    {% if critical_hosts %}
+                    <ul style="list-style:none;padding:0;margin:0;">
+                        {% for h in critical_hosts %}
+                        <li>
+                            <a href="/api/v1/validation/investigations/workspace?target={{ h }}"
+                               class="mono" style="color:var(--accent);font-size:12px;">{{ h }}</a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <span class="text-muted" style="font-size:12px;">None</span>
+                    {% endif %}
+                </div>
+                <div>
+                    <div class="evidence-label" style="margin-bottom:6px;">Never Validated</div>
+                    {% if never_validated_hosts %}
+                    <ul style="list-style:none;padding:0;margin:0;">
+                        {% for h in never_validated_hosts %}
+                        <li>
+                            <a href="/api/v1/validation/investigations/workspace?target={{ h }}"
+                               class="mono text-muted" style="font-size:12px;">{{ h }}</a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <span class="text-muted" style="font-size:12px;">None</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        {# Quick actions #}
+        <div class="card">
+            <div class="card-title">Quick Actions</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <a class="btn btn-primary" href="/api/v1/validation/investigations">Investigations</a>
+                {% if pending_queue_count > 0 %}
+                <a class="btn btn-action-warn" href="/api/v1/validation/queue?status=pending">
+                    Queue ({{ pending_queue_count }})
+                </a>
+                {% endif %}
+                <button class="btn btn-secondary"
+                    hx-post="/api/v1/validation/settings/nvd-sync?full=false"
+                    hx-swap="none">Sync CVE DB</button>
+            </div>
+        </div>
+
+    </div>
+
+    {# Right: Recent activity as timeline #}
+    <div class="card">
+        <div class="card-title">Investigation Activity</div>
+        {% if recent_activity %}
+        <div class="event-timeline">
+            {% for a in recent_activity %}
+            <div class="event-item ev-{{ a.action }}">
+                <div class="event-summary">{{ a.summary }}</div>
+                <div class="event-time">{{ a.timestamp.strftime('%Y-%m-%d %H:%M') }}</div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state" style="padding:32px 0;">
+            <p>No activity in the last 7 days.</p>
+            <a href="/api/v1/validation/investigations" style="display:inline-block;margin-top:12px;">
+                <button class="btn btn-primary">Open Investigations →</button>
+            </a>
+        </div>
+        {% endif %}
+    </div>
+
+</div>
+
+{% endblock %}

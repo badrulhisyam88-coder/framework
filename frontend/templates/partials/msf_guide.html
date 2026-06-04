@@ -1,0 +1,67 @@
+{# Inputs: service_key, recipe = {title, summary, default_port, modules, tips}, groups = [(intent_key, label, [modules])] #}
+<div class="msf-guide-recipe">
+    <h3 style="font-size:14px;margin:0 0 4px 0;">
+        {{ recipe.title }}
+    </h3>
+    <p class="text-muted" style="font-size:12px;margin:0 0 12px 0;">{{ recipe.summary }}</p>
+
+    {% for intent_key, label, mods in groups %}
+    <div style="margin-bottom:14px;">
+        <div class="evidence-label" style="margin-bottom:6px;">{{ label }}</div>
+        {% for mod in mods %}
+        <div class="msf-recipe-mod">
+            <div class="msf-recipe-mod-head">
+                <span class="module-type">{{ mod.type }}</span>
+                <span class="mono" style="font-size:12px;color:var(--text-primary);">{{ mod.type }}/{{ mod.path }}</span>
+                <button type="button"
+                        class="btn btn-primary btn-sm"
+                        style="margin-left:auto;"
+                        onclick="loadMsfModule('{{ mod.type }}', '{{ mod.path }}')">
+                    Try this →
+                </button>
+            </div>
+            <div class="msf-recipe-what">{{ mod.what_it_does }}</div>
+
+            {% if mod.required %}
+            <div class="msf-recipe-block">
+                <span class="msf-recipe-label">Required options</span>
+                <ul>
+                    {% for k, hint in mod.required.items() %}
+                    <li><span class="mono">{{ k }}</span> — {{ hint }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            <div class="msf-recipe-grid">
+                <div>
+                    <span class="msf-recipe-label" style="color:var(--low);">Success looks like</span>
+                    <pre class="msf-output" style="font-size:10.5px;max-height:90px;">{{ mod.success }}</pre>
+                </div>
+                <div>
+                    <span class="msf-recipe-label" style="color:var(--text-muted);">Failure / nothing-found looks like</span>
+                    <pre class="msf-output" style="font-size:10.5px;max-height:90px;background:#181c22;color:var(--text-muted);">{{ mod.failure }}</pre>
+                </div>
+            </div>
+
+            {% if mod.note %}
+            <div class="msf-recipe-note">
+                <strong>Note:</strong> {{ mod.note }}
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endfor %}
+
+    {% if recipe.tips %}
+    <div class="msf-recipe-tips">
+        <div class="evidence-label" style="margin-bottom:6px;">Tips</div>
+        <ul>
+            {% for tip in recipe.tips %}
+            <li>{{ tip }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+</div>

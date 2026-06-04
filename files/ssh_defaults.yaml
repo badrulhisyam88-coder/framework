@@ -1,0 +1,29 @@
+# SSH default credential pairs for validation
+# Add or remove pairs as needed for your environment
+# These are tried in order — first success stops execution
+
+credentials:
+  - username: admin
+    password: admin
+  - username: admin
+    password: password
+  - username: admin
+    password: ""
+  - username: root
+    password: root
+  - username: root
+    password: password
+  - username: root
+    password: toor
+  - username: root
+    password: ""
+  - username: user
+    password: user
+  - username: test
+    password: test
+  - username: pi
+    password: raspberry
+  - username: ubuntu
+    password: ubuntu
+  - username: vagrant
+    password: vagrant

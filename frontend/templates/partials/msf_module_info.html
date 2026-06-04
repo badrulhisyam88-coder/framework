@@ -1,0 +1,91 @@
+{# Inputs: m = {path, type, name, description, rank, references[], options[]} #}
+<div class="card-title">
+    {{ m.type|upper }}
+    <span class="mono" style="margin-left:6px;">{{ m.type }}/{{ m.path }}</span>
+</div>
+<h3 style="font-size:15px;margin-bottom:6px;">{{ m.name }}</h3>
+{% if m.rank %}
+<p class="text-muted mono" style="font-size:11px;">rank: {{ m.rank }}</p>
+{% endif %}
+{% if m.description %}
+<p class="text-muted" style="font-size:12px;margin:8px 0;">{{ m.description }}</p>
+{% endif %}
+
+{% if m.references %}
+<div class="evidence-label" style="margin-top:8px;">References</div>
+<ul style="margin:4px 0 12px 18px;font-size:11px;color:var(--text-muted);">
+    {% for ref in m.references %}
+    <li>
+        {% if ref.source %}<strong>{{ ref.source }}</strong>:{% endif %}
+        {{ ref.value }}
+    </li>
+    {% endfor %}
+</ul>
+{% endif %}
+
+<form onsubmit="return runMsfModule(event)"
+      data-module-type="{{ m.type }}"
+      data-module-path="{{ m.path }}">
+    {% set pinned = ['RHOSTS','RHOST','RPORT','TARGETURI','LHOST','LPORT','SMBUser','SMBPass','USERNAME','PASSWORD']
+        + (wordlist_option_names or []) %}
+    <div class="evidence-label" style="margin-top:6px;">Options</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;margin-bottom:12px;">
+        {% for opt in m.options %}
+        {% if opt.required or opt.name in pinned %}
+        <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label" style="font-size:11px;">
+                {{ opt.name }}
+                {% if opt.required %}<span class="severity-high">*</span>{% endif %}
+                <span class="text-muted" style="font-weight:400;">{{ opt.type or "" }}</span>
+            </label>
+            <input class="form-input msf-option"
+                   data-option-name="{{ opt.name }}"
+                   value="{{ '' if opt.current is none else opt.current }}"
+                   placeholder="{{ opt.default or '' }}">
+            {% if opt.description %}
+            <small class="text-muted" style="display:block;font-size:10px;margin-top:2px;">
+                {{ opt.description }}
+            </small>
+            {% endif %}
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+
+    {% set advanced_count = m.options|selectattr('required', 'equalto', false)|list|length %}
+    {% if advanced_count %}
+    <details style="margin-bottom:12px;">
+        <summary class="text-muted" style="cursor:pointer;font-size:11px;">
+            All other options ({{ m.options|length }} total)
+        </summary>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;margin-top:10px;">
+            {% for opt in m.options %}
+            {% if not opt.required and opt.name not in pinned %}
+            <div class="form-group" style="margin-bottom:0;">
+                <label class="form-label" style="font-size:10px;">
+                    {{ opt.name }}
+                    <span class="text-muted" style="font-weight:400;">{{ opt.type or "" }}</span>
+                </label>
+                <input class="form-input msf-option"
+                       data-option-name="{{ opt.name }}"
+                       value="{{ '' if opt.current is none else opt.current }}"
+                       placeholder="{{ opt.default or '' }}">
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+    </details>
+    {% endif %}
+
+    <div class="flex gap-3" style="align-items:center;">
+        <label class="text-muted" style="font-size:12px;">
+            <input type="radio" name="msf-mode" value="run" checked> Run
+        </label>
+        {% if m.type == "exploit" %}
+        <label class="text-muted" style="font-size:12px;">
+            <input type="radio" name="msf-mode" value="check"> Check only
+        </label>
+        {% endif %}
+        <button type="submit" class="btn btn-primary">▶ Run module</button>
+    </div>
+</form>

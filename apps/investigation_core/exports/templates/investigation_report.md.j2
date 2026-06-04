@@ -1,0 +1,248 @@
+---
+title: "{{ investigation.title }}"
+date: {{ export_date }}
+tags:
+{% for tag in tags %}
+  - {{ tag }}
+{% endfor %}
+investigation_id: "{{ investigation.investigation_id }}"
+target: "{{ target }}"
+stage: {{ investigation.workflow_stage }}
+status: {{ investigation.status }}
+skills_unlocked:
+{% for skill_id in skills_unlocked %}
+  - {{ skill_id }}
+{% endfor %}
+skills_mastered:
+{% for skill_id in skills_mastered %}
+  - {{ skill_id }}
+{% endfor %}
+export_generated: "{{ export_date }}"
+---
+
+# Investigation: {{ investigation.title }}
+
+**Target:** `{{ target }}`
+**Stage:** {{ stage_label }}
+**Status:** {{ investigation.status }}
+**Last Updated:** {{ export_date }}
+
+---
+
+## Summary
+
+{% if investigation.notes %}
+{{ investigation.notes }}
+{% else %}
+*No investigation notes.*
+{% endif %}
+
+{{ summary_text }}
+
+---
+
+## Investigation Themes
+
+{% if themes %}
+{% for t in themes %}
+### [[{{ t.wikilink }}]] — {{ t.confidence }}
+
+{{ t.description }}
+
+- **Findings matching:** {{ t.matching_finding_count }} ({{ t.matching_finding_types | join(', ') }})
+- **Remediation documented:** {% if t.remediation_documented %}✓ yes{% else %}⚠ no{% endif %}
+
+> {{ t.why }}
+
+{% if t.remediation_concepts %}
+**Remediation concepts:**
+
+{% for concept in t.remediation_concepts %}
+- [[Remediation — {{ concept }}]]
+{% endfor %}
+{% endif %}
+
+{% if t.cross_links %}
+**Pattern also appears in:**
+
+{% for cl in t.cross_links %}
+- [[Investigation — {{ cl.title }}]] ({{ cl.matching_finding_count }} finding{{ 's' if cl.matching_finding_count != 1 }})
+{% endfor %}
+{% endif %}
+
+{% endfor %}
+{% else %}
+*No root-cause themes identified — investigation is single-finding-oriented.*
+{% endif %}
+
+---
+
+## Findings ({{ findings | length }})
+
+{% if findings %}
+{% set has_endpoint = findings | selectattr('endpoint') | list | length > 0 %}
+{% set has_cvss = findings | selectattr('max_cvss') | list | length > 0 %}
+{% set has_cve = findings | map(attribute='related_cves') | select | list | length > 0 %}
+| Severity | Type | Port{% if has_endpoint %} | Endpoint{% endif %}{% if has_cvss %} | CVSSv3{% endif %} | Status |
+|----------|------|----{% if has_endpoint %}|---------{% endif %}{% if has_cvss %}|-------{% endif %}|--------|
+{% for f in findings %}
+| {{ f.severity }} | `{{ f.finding_type }}` | {{ f.port }}{% if has_endpoint %} | {{ f.endpoint or "—" }}{% endif %}{% if has_cvss %} | {{ f.max_cvss or "—" }}{% endif %} | {{ f.validation_status if f.validation_status != "—" else f.status }} |
+{% endfor %}
+
+{% if has_cve %}
+### CVE References
+{% for f in findings %}
+{% if f.related_cves %}
+- **{{ f.finding_type }}**: {{ f.related_cves | join(', ') }}{% if f.max_cvss %} (max CVSS {{ f.max_cvss }}){% endif %}
+{% endif %}
+{% endfor %}
+{% endif %}
+
+{% if exploitable_findings %}
+### Confirmed Exploitable
+{% for f in exploitable_findings %}
+- **{{ f.severity | upper }} — {{ f.finding_type }}** (port {{ f.port }})
+{% endfor %}
+{% endif %}
+{% else %}
+*No findings recorded.*
+{% endif %}
+
+---
+
+## Evidence Captured ({{ evidence | length }})
+
+{% if evidence %}
+{% for a in evidence %}
+### {{ a.title }}
+
+**Type:** {{ a.artifact_type }}
+**Captured:** {{ a.created_at.strftime('%Y-%m-%d %H:%M') if a.created_at is not string else a.created_at[:16] }}
+{% if a.description %}**Context:** {{ a.description }}{% endif %}
+
+{% if a.artifact_type in ('payload_attempt', 'http_request', 'http_response', 'terminal_output', 'response_diff') %}
+```
+{{ a.content[:500] }}{% if a.content | length > 500 %}
+… [truncated]{% endif %}
+```
+{% else %}
+{{ a.content[:300] }}{% if a.content | length > 300 %}…{% endif %}
+{% endif %}
+
+{% endfor %}
+{% else %}
+*No evidence artifacts captured.*
+{% endif %}
+
+---
+
+## Learning Paths
+
+{% if completed_paths %}
+### Completed
+
+{% for p in completed_paths %}
+- ✓ **{{ p.title }}** (`{{ p.path_id }}`)
+{% endfor %}
+{% else %}
+*No learning paths completed.*
+{% endif %}
+
+{% if active_paths %}
+### In Progress
+
+{% for p in active_paths %}
+- ◉ **{{ p.title }}** (`{{ p.path_id }}`)
+{% endfor %}
+{% endif %}
+
+---
+
+## Guided Actions
+
+{% if completed_actions %}
+### Completed
+
+{% for a in completed_actions %}
+- ✓ **{{ a.title }}** — Risk: {{ a.risk_level }}
+{% endfor %}
+{% else %}
+*No guided actions completed.*
+{% endif %}
+
+---
+
+## Skill Progression
+
+{% if mastery_records %}
+{% for m in mastery_records %}
+{% set skill = skills_by_id.get(m.skill_id) %}
+{% if skill %}
+- {% if m.status == 'mastered' %}★{% elif m.status == 'completed' %}✓{% elif m.status == 'in_progress' %}◉{% else %}○{% endif %} **[[{{ skill.wiki_link }}]]** ({{ m.status }}) — confidence: {{ (m.confidence_score * 100) | round | int }}%
+{% endif %}
+{% endfor %}
+{% else %}
+*No skill mastery recorded.*
+{% endif %}
+
+---
+
+## Remediation Notes
+
+{% if remediation_concepts %}
+{% for concept in remediation_concepts %}
+- {{ concept }}
+{% endfor %}
+{% else %}
+*No remediation concepts recorded.*
+{% endif %}
+
+---
+
+## Timeline Highlights
+
+{% if timeline_highlights %}
+{% for event in timeline_highlights %}
+- `{{ event.timestamp.strftime('%Y-%m-%d %H:%M') if event.timestamp is not string else event.timestamp[:16] }}` [{{ event.event_type }}] {{ event.summary }}
+{% endfor %}
+{% else %}
+*No timeline events recorded.*
+{% endif %}
+
+---
+
+## Remediation Playbook
+
+{% if themes %}
+For each active theme, the deterministic remediation concept set and any
+linked verification work captured in this investigation.
+
+{% for t in themes %}
+### [[Theme — {{ t.label }}]]
+
+**Confidence:** {{ t.confidence }}
+**Remediation documented:** {% if t.remediation_documented %}✓ yes{% else %}⚠ no{% endif %}
+
+Concepts to verify:
+{% for concept in t.remediation_concepts %}
+- [[Remediation — {{ concept }}]]
+{% endfor %}
+
+{% endfor %}
+{% else %}
+*No themes identified — capture more findings or scope a wider investigation.*
+{% endif %}
+
+---
+
+## Related
+
+{% if related_wiki_links %}
+{% for link in related_wiki_links %}
+- [[{{ link }}]]
+{% endfor %}
+{% endif %}
+
+---
+
+*Generated by AI Assist Tool — Investigation Core*

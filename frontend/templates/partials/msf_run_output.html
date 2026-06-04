@@ -1,0 +1,36 @@
+{# Inputs: run = MsfRun #}
+<div class="flex gap-3" style="align-items:baseline;margin-bottom:8px;">
+    <span class="mono" style="font-size:12px;">
+        {{ run.module_type }}/{{ run.module_path }}
+    </span>
+    <span class="qstatus qstatus-{{ run.status }}">{{ run.status }}</span>
+    <span class="text-muted mono" style="font-size:11px;">
+        {{ run.started_at.strftime('%Y-%m-%d %H:%M:%S') }}
+        {% if run.completed_at %}
+        → {{ run.completed_at.strftime('%H:%M:%S') }}
+        {% endif %}
+    </span>
+    {% if run.target %}
+    <span class="mono text-muted" style="font-size:11px;">target: {{ run.target }}</span>
+    {% endif %}
+    <span style="margin-left:auto;">
+        <button class="btn btn-reject btn-sm"
+                hx-delete="/api/v1/validation/metasploit/runs/{{ run.id }}"
+                hx-target="#msf-output-content"
+                hx-swap="innerHTML"
+                hx-confirm="Delete this run from history?">
+            ✕ Delete
+        </button>
+    </span>
+</div>
+
+{% if run.options %}
+<div class="text-muted mono" style="font-size:11px;margin-bottom:6px;">
+    options:
+    {% for k, v in run.options.items() %}
+    <span style="margin-right:8px;">{{ k }}={{ v }}</span>
+    {% endfor %}
+</div>
+{% endif %}
+
+<pre class="msf-output">{{ run.output or "(no output)" }}</pre>

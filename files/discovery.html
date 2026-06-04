@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Discovery — AI Assist Tool{% endblock %}
+{% block heading %}Discovery{% endblock %}
+
+{% block actions %}
+<button class="btn btn-primary"
+    hx-post="/api/v1/validation/discovery/scan"
+    hx-include="#scan-form"
+    hx-target="#scan-result"
+    hx-swap="innerHTML"
+    hx-indicator="#scan-spinner">
+    <span class="htmx-indicator" id="scan-spinner"><span class="spinner"></span></span>
+    Run Scan
+</button>
+{% endblock %}
+
+{% block content %}
+<div class="scan-form" id="scan-form">
+    <div class="form-group">
+        <label class="form-label">Target (IP / CIDR / Hostname)</label>
+        <input class="form-input" name="target" placeholder="192.168.1.0/24" required>
+    </div>
+    <div class="form-group" style="max-width:160px">
+        <label class="form-label">Scan Type</label>
+        <select class="form-select" name="scan_type">
+            <option value="quick">Quick</option>
+            <option value="full">Full</option>
+            <option value="custom">Custom</option>
+        </select>
+    </div>
+</div>
+
+<div id="scan-result"></div>
+
+<div class="stats-row">
+    <div class="stat-card">
+        <div class="stat-value">{{ hosts|length }}</div>
+        <div class="stat-label">Hosts</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ total_services }}</div>
+        <div class="stat-label">Services</div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-title">Discovered Hosts</div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>IP Address</th>
+                    <th>Hostname</th>
+                    <th>OS Guess</th>
+                    <th>First Seen</th>
+                    <th>Last Seen</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for host in hosts %}
+                <tr>
+                    <td class="mono">{{ host.ip }}</td>
+                    <td class="text-muted">{{ host.hostname or "—" }}</td>
+                    <td class="text-muted">{{ host.os_guess or "—" }}</td>
+                    <td class="text-muted mono">{{ host.first_seen.strftime('%Y-%m-%d %H:%M') }}</td>
+                    <td class="text-muted mono">{{ host.last_seen.strftime('%Y-%m-%d %H:%M') }}</td>
+                    <td><span class="qstatus qstatus-{{ host.status }}">{{ host.status }}</span></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" class="empty-state">No hosts discovered yet. Run a scan to begin.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

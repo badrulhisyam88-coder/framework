@@ -1,0 +1,237 @@
+{#
+  Phase C-2 — Three-zone selection card for finding context panels.
+
+  Context variables (all passed by context_panel route):
+    investigation_id         str
+    finding_id               str
+    finding_type_label       str   e.g. "Login Form Detected"
+    finding_display_title    str   e.g. "Login form at /login"
+    all_techniques_tried     bool  — Part C: True when ranked list exhausted
+    finding_endpoint_display str   e.g. "/login" (may be empty)
+    selection_options        list[TechniqueOption]
+    preselect                int|None  — index of auto-preselected option, or None
+
+  Note: raw similarity floats are NEVER exposed to the operator — only
+  confidence labels (High/Med/Low/Known) and the visual bar.
+#}
+
+{# ── Zone 1: Finding context ─────────────────────────────────────── #}
+<div class="rounded-md border border-[#d0d7de] bg-[#f6f8fa] px-3 py-2 mb-2 text-xs">
+  <div class="text-[10px] text-zinc-500 uppercase tracking-wide mb-0.5">Finding</div>
+  {% if finding_type_label %}
+    <div class="font-semibold text-[#1f2328] text-[12px]">{{ finding_type_label }}</div>
+  {% endif %}
+  {% if finding_display_title %}
+    <div class="text-[#656d76] mt-0.5 text-[11px] leading-snug">{{ finding_display_title }}</div>
+  {% endif %}
+  {% if finding_endpoint_display %}
+    <div class="mt-1 font-mono text-[10px] text-[#0969da] bg-[#ddf4ff] px-1.5 py-0.5 rounded inline-block">
+      {{ finding_endpoint_display }}
+    </div>
+  {% endif %}
+</div>
+
+{# ── Zone 2: Technique selection ─────────────────────────────────── #}
+{% if selection_options %}
+<div class="mb-2">
+  <div class="text-[10px] text-zinc-500 uppercase tracking-wide mb-1">Select technique</div>
+
+  <form id="sel-card-form-{{ finding_id }}">
+  <div class="space-y-1">
+  {% for opt in selection_options %}
+    {#
+      Confidence tier:
+        similarity ≥ 0.70          → High   ████
+        0.55 ≤ similarity < 0.70   → Med    ███░
+        0.35 ≤ similarity < 0.55   → Low    ██░░
+        source == "suggestions"     → Known  (label only)
+        engine_id is None           → advisory
+    #}
+    {% if opt.source == "work_order" %}
+      {% set conf_label = "AI" %}
+      {% set conf_bar   = "" %}
+      {% set conf_color = "text-[#7c3aed]" %}
+    {% elif opt.source == "suggestions" %}
+      {% set conf_label = "Known" %}
+      {% set conf_bar   = "" %}
+      {% set conf_color = "text-zinc-400" %}
+    {% elif opt.similarity >= 0.70 %}
+      {% set conf_label = "High" %}
+      {% set conf_bar   = "████" %}
+      {% set conf_color = "text-emerald-600" %}
+    {% elif opt.similarity >= 0.55 %}
+      {% set conf_label = "Med" %}
+      {% set conf_bar   = "███░" %}
+      {% set conf_color = "text-blue-600" %}
+    {% elif opt.similarity >= 0.35 %}
+      {% set conf_label = "Low" %}
+      {% set conf_bar   = "██░░" %}
+      {% set conf_color = "text-amber-600" %}
+    {% else %}
+      {% set conf_label = "Low" %}
+      {% set conf_bar   = "█░░░" %}
+      {% set conf_color = "text-zinc-400" %}
+    {% endif %}
+
+    {% set is_advisory = (opt.engine_id is none) %}
+    {% set is_checked  = (preselect == loop.index0) %}
+
+    <label class="flex items-start gap-2 cursor-pointer rounded-md border px-2 py-1.5 transition-colors
+      {% if is_advisory %}border-zinc-200 bg-zinc-50 opacity-60
+      {% elif is_checked %}border-blue-400 bg-[#ddf4ff]
+      {% else %}border-[#d0d7de] hover:border-[#1f2328] bg-white{% endif %}">
+
+      <input
+        type="radio"
+        name="sel_technique_{{ finding_id }}"
+        value="{{ opt.engine_id or '' }}"
+        class="mt-0.5 shrink-0"
+        {% if is_checked %}checked{% endif %}
+        {% if is_advisory %}data-advisory="true"{% else %}data-advisory="false"{% endif %}
+        data-engine-id="{{ opt.engine_id or '' }}"
+        data-concept-id="{{ opt.concept_id or '' }}"
+        data-work-order-id="{{ opt.work_order_id or '' }}"
+        onchange="window._selCardUpdate('{{ finding_id }}')">
+
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-1.5 flex-wrap">
+          <span class="text-[12px] font-medium text-[#1f2328] truncate">
+            {{ opt.title }}{% if is_advisory %} · <em class="not-italic text-zinc-400">Advisory</em>{% endif %}
+          </span>
+          {# Confidence indicator #}
+          {% if opt.source == "work_order" %}
+            <span class="text-[9px] px-1.5 py-0.5 rounded bg-[#f3e8ff] text-[#7c3aed] shrink-0 font-medium">AI work order</span>
+          {% elif opt.source == "suggestions" %}
+            <span class="text-[9px] px-1 py-0.5 rounded bg-zinc-100 text-zinc-500 shrink-0">Known match</span>
+          {% else %}
+            <span class="font-mono text-[9px] {{ conf_color }} shrink-0" title="Vault similarity confidence">
+              {{ conf_bar }} {{ conf_label }}
+            </span>
+          {% endif %}
+        </div>
+        {# Session required badge — changes state when session has been captured #}
+        {% if opt.requires_session %}
+          {% if session_available %}
+            <div class="mt-0.5 text-[10px] text-[#1a7f37] flex items-center gap-0.5">
+              <span>🔑</span><span>Session available</span>
+            </div>
+          {% else %}
+            <div class="mt-0.5 text-[10px] text-amber-700 flex items-center gap-0.5">
+              <span>⚠</span><span>Requires login first</span>
+            </div>
+          {% endif %}
+        {% endif %}
+        {# Advisory: no engine yet label #}
+        {% if is_advisory %}
+          <div class="mt-0.5 text-[10px] text-zinc-400">No engine yet — reference only</div>
+        {% endif %}
+        {# Template badge — vault execution template available #}
+        {% if opt.payload_template_available %}
+          <span class="mt-0.5 inline-block text-[9px] px-1 py-0.5 rounded bg-[#f3e8ff] text-[#7c3aed]">Template</span>
+        {% endif %}
+        {# Already attempted badge — backtracking signal #}
+        {% if opt.already_attempted %}
+          <span class="mt-0.5 inline-block text-[9px] px-1 py-0.5 rounded bg-zinc-100 text-zinc-400">Tried</span>
+        {% endif %}
+      </div>
+    </label>
+  {% endfor %}
+  </div>{# space-y-1 #}
+
+  {# ── Execute button ───────────────────────────────────────────── #}
+  <div class="mt-2 flex items-center gap-2">
+    <button
+      id="sel-execute-btn-{{ finding_id }}"
+      type="button"
+      class="rounded bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed
+             px-3 py-1 text-[11px] text-white font-medium transition-opacity"
+      {% if execute_disabled %}disabled{% endif %}
+      hx-post=""
+      hx-target="#result-zone-{{ finding_id }}"
+      hx-swap="innerHTML"
+      hx-on::after-request="window.dispatchEvent(new CustomEvent('inv-topology-refresh'))">
+      Execute Selected →
+    </button>
+    <span id="sel-hint-{{ finding_id }}"
+          class="text-[10px] text-zinc-400"
+          {% if preselect is none %}style="display:none"{% endif %}>
+      {% if preselect is not none and selection_options[preselect].engine_id %}
+        Auto-selected by vault confidence
+      {% endif %}
+    </span>
+  </div>
+  </form>
+</div>
+
+{# ── Zone 3: Result placeholder ───────────────────────────────────── #}
+<div id="result-zone-{{ finding_id }}"
+     style="min-height:48px;"
+     class="rounded-md border border-dashed border-zinc-200 px-2 py-1.5 text-[10px] text-zinc-300">
+  {# Phase C-3 will parse engine output here. Raw engine response directed into this zone. #}
+</div>
+
+{# Minimal script: update Execute button URL when radio selection changes #}
+<script>
+window._selCardUpdate = window._selCardUpdate || function(findingId) {
+  var form    = document.getElementById('sel-card-form-' + findingId);
+  var btn     = document.getElementById('sel-execute-btn-' + findingId);
+  var hint    = document.getElementById('sel-hint-' + findingId);
+  if (!form || !btn) return;
+  var sel = form.querySelector('input[name="sel_technique_' + findingId + '"]:checked');
+  if (!sel || sel.dataset.advisory === 'true' || !sel.value) {
+    btn.disabled = true;
+    if (hint) hint.style.display = 'none';
+    return;
+  }
+  btn.disabled = false;
+  var invId     = '{{ investigation_id }}';
+  var fid       = '{{ finding_id }}';
+  var conceptId    = sel.dataset.conceptId || '';
+  var workOrderId  = sel.dataset.workOrderId || '';
+  var url = '/api/v1/validation/workspace/investigations/' + invId
+            + '/finding/' + fid
+            + '/suggest/' + sel.value
+            + '/execute';
+  var qs = [];
+  if (conceptId)   qs.push('concept_id='    + encodeURIComponent(conceptId));
+  if (workOrderId) qs.push('work_order_id=' + encodeURIComponent(workOrderId));
+  if (qs.length)   url += '?' + qs.join('&');
+  btn.setAttribute('hx-post', url);
+  if (typeof htmx !== 'undefined') { htmx.process(btn); }
+  if (hint) hint.style.display = '';
+};
+{% if preselect is not none and selection_options[preselect].engine_id %}
+(function() {
+  var fid = '{{ finding_id }}';
+  var btn = document.getElementById('sel-execute-btn-' + fid);
+  if (!btn) return;
+  var invId   = '{{ investigation_id }}';
+  var engine  = '{{ selection_options[preselect].engine_id }}';
+  var cid     = '{{ selection_options[preselect].concept_id }}';
+  var woid    = '{{ selection_options[preselect].work_order_id or "" }}';
+  var url = '/api/v1/validation/workspace/investigations/' + invId
+            + '/finding/' + fid
+            + '/suggest/' + engine
+            + '/execute';
+  var qs = [];
+  if (cid)  qs.push('concept_id='    + encodeURIComponent(cid));
+  if (woid) qs.push('work_order_id=' + encodeURIComponent(woid));
+  if (qs.length) url += '?' + qs.join('&');
+  btn.setAttribute('hx-post', url);
+  if (typeof htmx !== 'undefined') { htmx.process(btn); }
+})();
+{% endif %}
+</script>
+
+{% elif all_techniques_tried %}
+{# Part C — all ranked techniques tried state #}
+<div class="rounded-md border border-zinc-200 bg-zinc-50 px-2 py-2 text-[11px] text-zinc-400">
+  All ranked techniques tried for this finding.
+  You can retry any option above or explore a different finding.
+</div>
+{% else %}
+{# Empty state — no options available #}
+<div class="text-[11px] text-zinc-400 py-2">
+  No techniques available for this finding type.
+</div>
+{% endif %}

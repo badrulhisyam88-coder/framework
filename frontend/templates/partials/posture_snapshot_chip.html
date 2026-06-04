@@ -1,0 +1,29 @@
+{#
+  Partial: posture_snapshot_chip.html
+  Returned after POST /posture-snapshots — confirmation chip.
+  Context: snapshot
+#}
+<div class="posture-chip posture-chip--{{ snapshot.snapshot_kind }}">
+  <span class="posture-chip-icon">⬢</span>
+  <span class="posture-chip-text">
+    Captured: {{ snapshot.label }}
+    <span class="mono">({{ snapshot.findings_count }} finding(s), eq {{ snapshot.evidence_quality_score }}/100)</span>
+  </span>
+  <span class="posture-chip-ts mono">{{ snapshot.captured_at.strftime('%H:%M:%S') }}</span>
+</div>
+
+<style>
+.posture-chip {
+  display: inline-flex; align-items: baseline; gap: .4rem;
+  margin-top: .35rem; padding: .35rem .6rem;
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-raised));
+  border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--border));
+  border-radius: 4px; font-size: .7rem;
+}
+.posture-chip-icon { color: var(--accent); }
+.posture-chip-text { flex: 1; }
+.posture-chip-ts { font-size: .6rem; color: var(--text-muted); }
+.posture-chip--post_remediation { border-color: color-mix(in srgb, var(--low) 35%, var(--border));
+                                  background: color-mix(in srgb, var(--low) 8%, var(--bg-raised)); }
+.posture-chip--regression_check { border-color: color-mix(in srgb, var(--medium) 35%, var(--border)); }
+</style>
