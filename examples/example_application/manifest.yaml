@@ -1,0 +1,8 @@
+kind: application
+id: example_application
+owner: "Example Team"
+status: composed
+modules:
+  - example_task_module
+capabilities:
+  - example_logging

@@ -1,0 +1,7 @@
+- id: example_task_module.task
+  label: Task
+  definition: "A unit of work assigned to a Principal, created via the create_task Command."
+  meta_model_type: Entity
+  owner_module: example_task_module
+  scope: example_application
+  aliases: [todo, ticket]

@@ -1,0 +1,31 @@
+kind: module
+id: example_task_module
+owner: "Example Team"
+status: active
+required_capabilities:
+  - example_logging
+
+contracts:
+  - name: create_task
+    kind: command
+    major_version: 1
+    status: published
+    description: "Create a new Task"
+    produces_events: [task_created]
+  - name: list_tasks
+    kind: query
+    major_version: 1
+    status: published
+    description: "List Tasks, optionally filtered by assignee"
+
+events:
+  - name: task_created
+    description: "A Task was created"
+
+policies:
+  - id: example_task_module.create_task.policy
+    command: create_task
+    description: "Any active Principal may create a Task"
+  - id: example_task_module.list_tasks.policy
+    command: list_tasks
+    description: "Any active Principal may list Tasks"

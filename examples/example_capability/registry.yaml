@@ -1,0 +1,10 @@
+kind: capability
+id: example_logging
+owner: "Platform Team"
+status: active
+contracts:
+  - name: log_event
+    kind: command
+    major_version: 1
+    status: published
+    description: "Record one structured log entry"
