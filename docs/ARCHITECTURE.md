@@ -1,7 +1,9 @@
 # Architecture
 
 This document is the condensed, canonical spec. See `docs/GLOSSARY.md` for term-by-term
-definitions and `docs/AGENTS.md` for how an AI agent should use all of this in practice.
+definitions, `docs/AGENTS.md` for how an AI agent should use all of this in practice, and
+`docs/GOVERNANCE.md` for how permanent decisions about any of this get made, recorded, and kept
+synchronized over time.
 
 ## What this is
 
@@ -97,6 +99,10 @@ conformance (declared footprint vs. Discovery Index's observed scan) · Generate
 drift · Application composition validity · Policy coverage. Every check is fail-closed: an
 ambiguous or missing declaration is a violation, not a silent pass. See `registry/validator.py`
 for the implementation of each.
+
+A green Validator run confirms code and Registry are internally consistent at this instant — it
+does not by itself confirm a *permanent* decision's surrounding documentation and decision record
+are current. See `docs/GOVERNANCE.md`'s Definition of Done for the complete condition.
 
 ## Concept Model
 

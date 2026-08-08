@@ -6,7 +6,8 @@ does not.
 
 Full architecture: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Terminology:
 [`docs/GLOSSARY.md`](docs/GLOSSARY.md). AI operating instructions:
-[`docs/AGENTS.md`](docs/AGENTS.md).
+[`docs/AGENTS.md`](docs/AGENTS.md). How architectural decisions are made, recorded, and kept
+synchronized: [`docs/GOVERNANCE.md`](docs/GOVERNANCE.md).
 
 ## Layout
 
@@ -78,6 +79,11 @@ process:
 If, partway through, you find yourself wanting to change something in `platform/` to make
 Hospital work — stop. That's a signal the Platform's boundary was drawn wrong somewhere, not
 a normal cost of adding a new Application. See `docs/ARCHITECTURE.md`.
+
+Step 4 (the Validator) isn't the last step for a *permanent* decision — see
+[`docs/GOVERNANCE.md`](docs/GOVERNANCE.md) for the Documentation Synchronization Policy and
+Definition of Done that make "done" mean every derived artifact and document is current too, not
+just that the code works.
 
 ## Lineage
 
