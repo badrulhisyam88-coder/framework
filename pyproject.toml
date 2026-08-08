@@ -1,6 +1,6 @@
 [project]
 name = "framework-final"
-version = "1.0.0"
+version = "1.1.1"
 description = "AI-native, domain-agnostic application platform. Applications change; the platform does not."
 requires-python = ">=3.11"
 dependencies = [

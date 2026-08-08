@@ -5,4 +5,4 @@ See docs/ARCHITECTURE.md and docs/GLOSSARY.md for the frozen terminology this
 package implements.
 """
 
-__version__ = "1.0.0"
+__version__ = "1.1.1"
