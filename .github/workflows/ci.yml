@@ -23,3 +23,8 @@ jobs:
           T=$(mktemp -d)
           bin/new-project demo --no-github --dir "$T"
           bash "$T/demo/scripts/verify.sh"
+          cd "$T/demo"
+          echo 'x = 1' > app.py
+          if bash scripts/verify.sh; then echo "verify should fail: code without tests"; exit 1; fi
+          mkdir -p tests && printf 'def test_ok():\n    assert True\n' > tests/test_app.py
+          pip install -q pytest && bash scripts/verify.sh
