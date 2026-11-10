@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Replace the block between STANDARDS markers in target files with standards/AGENTS.master.md.
+# Usage: sync-standards <file>...   (file without markers: block is appended)
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+MASTER="$ROOT/standards/AGENTS.master.md"
+[ $# -ge 1 ] || { echo "usage: $0 <file>..." >&2; exit 2; }
+for f in "$@"; do
+  [ -L "$f" ] && f="$(readlink -f "$f")"
+  [ -f "$f" ] || { mkdir -p "$(dirname "$f")"; : > "$f"; }
+  tmp="$(mktemp)"
+  if grep -q '<!-- STANDARDS:BEGIN -->' "$f"; then
+    awk -v master="$MASTER" '
+      /<!-- STANDARDS:BEGIN -->/ {print; while ((getline l < master) > 0) print l; skip=1; next}
+      /<!-- STANDARDS:END -->/ {skip=0}
+      !skip {print}' "$f" > "$tmp"
+  else
+    { cat "$f"; [ -s "$f" ] && echo; echo '<!-- STANDARDS:BEGIN -->'; cat "$MASTER"; echo '<!-- STANDARDS:END -->'; } > "$tmp"
+  fi
+  cat "$tmp" > "$f"; rm -f "$tmp"
+  echo "synced: $f"
+done

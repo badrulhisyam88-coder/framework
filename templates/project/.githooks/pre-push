@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Block direct pushes to main/master.
+while read -r _ _ remote_ref _; do
+  case "$remote_ref" in refs/heads/main|refs/heads/master)
+    echo "Blocked: never push to main. Use a branch and scripts/merge.sh." >&2; exit 1;;
+  esac
+done
+exit 0

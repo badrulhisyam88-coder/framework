@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# Create a new project from the standard template.
+# Usage: new-project <name> [--framework] [--no-github] [--dir <parent>]
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+NAME=""; FRAMEWORK=0; GITHUB=1; PARENT="$HOME/Developer"
+while [ $# -gt 0 ]; do case "$1" in
+  --framework) FRAMEWORK=1;; --no-github) GITHUB=0;;
+  --dir) PARENT="$2"; shift;;
+  -*) echo "unknown flag $1" >&2; exit 2;;
+  *) NAME="$1";; esac; shift; done
+[ -n "$NAME" ] || { echo "usage: new-project <name> [--framework] [--no-github] [--dir <parent>]" >&2; exit 2; }
+echo "$NAME" | grep -Eq '^[a-z0-9][a-z0-9._-]*$' || { echo "name must be lowercase letters, digits, . _ -" >&2; exit 2; }
+DEST="$PARENT/$NAME"
+[ ! -e "$DEST" ] || { echo "exists: $DEST" >&2; exit 1; }
+mkdir -p "$DEST"
+cp -R "$ROOT/templates/project/." "$DEST/"
+DATE="$(date +%F)"
+NOTE=""
+if [ "$FRAMEWORK" = 1 ]; then
+  cp "$ROOT/templates/overlay-framework/FRAMEWORK.md" "$DEST/docs/FRAMEWORK.md"
+  NOTE=$'\nBuilt on framework_final: read docs/FRAMEWORK.md first.\n'
+fi
+# fill placeholders (portable: perl)
+find "$DEST" -type f ! -path '*/.git/*' | while read -r f; do
+  NAME="$NAME" DATE="$DATE" NOTE="$NOTE" perl -0pi -e 's/\{\{NAME\}\}/$ENV{NAME}/g; s/\{\{DATE\}\}/$ENV{DATE}/g; s/\{\{FRAMEWORK_NOTE\}\}/$ENV{NOTE}/g' "$f"
+done
+"$ROOT/bin/sync-standards" "$DEST/AGENTS.md" >/dev/null
+cd "$DEST"
+git init -q -b main
+git config core.hooksPath .githooks
+git add -A
+git commit -q -m "chore: bootstrap from framework_final standard"
+echo "created $DEST"
+if [ "$GITHUB" = 1 ]; then
+  gh repo create "$NAME" --private --source . --remote origin --push
+  git switch -q -c feat/spec
+  echo "GitHub repo created (private). Now on branch feat/spec: write docs/SPEC.md, get owner OK, then docs/PLAN.md."
+else
+  git switch -q -c feat/spec
+  echo "No GitHub (--no-github). On branch feat/spec."
+fi
