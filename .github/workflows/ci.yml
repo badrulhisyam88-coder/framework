@@ -1,0 +1,25 @@
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -e ".[dev]"
+      - run: python -m pytest -q
+  template-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: new-project produces a project that passes verify
+        run: |
+          git config --global user.email ci@example.com
+          git config --global user.name ci
+          T=$(mktemp -d)
+          bin/new-project demo --no-github --dir "$T"
+          bash "$T/demo/scripts/verify.sh"

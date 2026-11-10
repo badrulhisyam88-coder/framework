@@ -1,0 +1,21 @@
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - name: Install deps (if any)
+        run: |
+          [ -f requirements.txt ] && pip install -r requirements.txt || true
+          [ -f pyproject.toml ] && pip install -e ".[dev]" || true
+          [ -f package-lock.json ] && npm ci || true
+          pip install pytest
+      - run: bash scripts/verify.sh
